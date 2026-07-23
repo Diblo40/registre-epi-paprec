@@ -504,7 +504,57 @@ async function loadData() {
                 await dbInsert('employees', employees);
             }
             if (cloudAttr !== null) { attributions = cloudAttr; changed = true; }
-            if (cloudHist !== null && cloudHist.length > 0) { history = cloudHist; changed = true; }
+            
+            if (cloudHist !== null && cloudHist.length > 0) { 
+                history = cloudHist; 
+                changed = true; 
+                
+                // Reconstruct invoices and priceHistory from cloud history logs
+                cloudHist.forEach(h => {
+                    if (h.action === "Achat / Appro" && h.notes && h.notes.includes("Facture:")) {
+                        // Parse notes: Facture:FAC-XXX | Qté:10 | PU:42.50 | Size:M | ...
+                        const matchFac = h.notes.match(/Facture:([^\s\|]+)/);
+                        const matchQte = h.notes.match(/Qté:(\d+)/);
+                        const matchPU = h.notes.match(/PU:([\d\.]+)/);
+                        const matchSize = h.notes.match(/Size:([^\s\|]+)/);
+                        const supplierName = h.employeeName ? h.employeeName.replace("Fournisseur:", "").trim() : "Paprec Appros";
+
+                        if (matchFac && matchPU) {
+                            const facNum = matchFac[1];
+                            const puVal = parseFloat(matchPU[1]);
+                            const qteVal = matchQte ? parseInt(matchQte[1]) : 1;
+                            const sizeVal = matchSize ? matchSize[1] : "Standard";
+
+                            if (!invoices.some(i => i.invoiceNumber === facNum && i.epiName === h.epi)) {
+                                invoices.push({
+                                    id: `fac_cloud_${Math.random().toString(36).substr(2,6)}`,
+                                    invoiceNumber: facNum,
+                                    supplier: supplierName,
+                                    date: h.date.split(" ")[0],
+                                    epiName: h.epi,
+                                    size: sizeVal,
+                                    quantity: qteVal,
+                                    unitPrice: puVal,
+                                    totalPrice: qteVal * puVal,
+                                    notes: h.notes
+                                });
+                            }
+
+                            if (!priceHistory.some(p => p.invoiceNumber === facNum && p.epiName === h.epi)) {
+                                priceHistory.push({
+                                    id: `ph_cloud_${Math.random().toString(36).substr(2,6)}`,
+                                    epiName: h.epi,
+                                    date: h.date.split(" ")[0],
+                                    unitPrice: puVal,
+                                    supplier: supplierName,
+                                    invoiceNumber: facNum
+                                });
+                            }
+                        }
+                    }
+                });
+            }
+
 
             if (changed) {
                 localStorage.setItem("paprec_epi_list", JSON.stringify(epiList));
@@ -2139,3 +2189,37 @@ document.addEventListener("DOMContentLoaded", () => {
         });
     }
 });
+
+
+// ── REAL-TIME MULTI-DEVICE CLOUD SYNC ENGINE ─────────────────────────────────
+let isSyncingInProcess = false;
+
+function updateCloudStatus(status, text) {
+    const badge = document.getElementById("cloud-sync-status-badge");
+    if (!badge) return;
+    if (status === "ok") {
+        badge.innerHTML = `<span style="color: #10b981;"><i class="fa-solid fa-cloud-check"></i> ${text || 'Synchronisé (Multi-Appareils)'}</span>`;
+    } else if (status === "syncing") {
+        badge.innerHTML = `<span style="color: #3b82f6;"><i class="fa-solid fa-rotate fa-spin"></i> ${text || 'Synchro en cours...'}</span>`;
+    } else if (status === "offline") {
+        badge.innerHTML = `<span style="color: #f59e0b;"><i class="fa-solid fa-cloud"></i> ${text || 'Stockage Local'}</span>`;
+    }
+}
+
+// Periodic Background Sync (every 10 seconds across all devices)
+function initRealtimeCloudSync() {
+    // Initial sync
+    initRealtimeCloudSync();
+
+    // Auto-poll every 10s
+    setInterval(() => {
+        if (!isSyncingInProcess) {
+            syncCloudWithLocal(true);
+        }
+    }, 10000);
+
+    // Sync when user re-focuses tab/window
+    window.addEventListener('focus', () => {
+        syncCloudWithLocal(true);
+    });
+}
