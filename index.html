@@ -1,0 +1,722 @@
+<!DOCTYPE html>
+<html lang="fr">
+<head>
+    
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <title>Registre EPI - Paprec Group</title>
+    <meta name="description" content="Plateforme de gestion et de suivi des EPI pour les équipes Paprec.">
+    <link rel="preconnect" href="https://fonts.googleapis.com">
+    <link rel="preconnect" href="https://fonts.gstatic.com" crossorigin>
+    <link href="https://fonts.googleapis.com/css2?family=Outfit:wght@400;600;700&family=Plus+Jakarta+Sans:wght@400;500;600;700&display=swap" rel="stylesheet">
+    <link rel="stylesheet" href="https://cdnjs.cloudflare.com/ajax/libs/font-awesome/6.5.0/css/all.min.css">
+    <link rel="stylesheet" href="styles.css">
+    
+    <!-- Scripts avec 'defer' (chargement non-bloquant et ordonné) -->
+    <script src="https://cdn.jsdelivr.net/npm/chart.js" defer></script>
+        <script src="app_v8.js" defer></script>
+</head>
+<body>
+
+<div class="app-container">
+    <!-- Sidebar Navigation -->
+    <aside class="sidebar">
+        <div class="brand">
+            <div class="logo-circle">
+                <i class="fa-solid fa-shield-halved"></i>
+            </div>
+            <div class="brand-info">
+                <h2>PAPREC</h2>
+                <span>Registre EPI</span>
+            </div>
+        </div>
+        <nav class="nav-menu">
+            <a href="#" class="nav-item active" data-tab="dashboard">
+                <i class="fa-solid fa-chart-line"></i>
+                <span>Tableau de bord</span>
+            </a>
+            <a href="#" class="nav-item" data-tab="personnel">
+                <i class="fa-solid fa-users"></i>
+                <span>Personnel</span>
+            </a>
+            <a href="#" class="nav-item" data-tab="attributions">
+                <i class="fa-solid fa-handshake"></i>
+                <span>Attributions</span>
+            </a>
+            <a href="#" class="nav-item" data-tab="equipements">
+                <i class="fa-solid fa-screwdriver-wrench"></i>
+                <span>Équipements (EPI)</span>
+            </a>
+            <a href="#" class="nav-item" data-tab="historique">
+                <i class="fa-solid fa-clock-rotate-left"></i>
+                <span>Historique</span>
+            </a>
+            <a href="#" class="nav-item" data-tab="finances" id="btn-tab-finances">
+                <i class="fa-solid fa-euro-sign"></i>
+                <span>Finances & Factures</span>
+            </a>
+        </nav>
+        <div class="sidebar-footer">
+            <div class="user-card">
+                <i class="fa-solid fa-user-tie"></i>
+                <div>
+                    <h4>Superviseur Paprec</h4>
+                    <span>Admin</span>
+                </div>
+            </div>
+        </div>
+    </aside>
+
+    <!-- Main Content Area -->
+    <main class="main-content">
+        <header class="main-header">
+            <div class="header-title">
+                <h1 id="page-title">Tableau de bord</h1>
+                <p id="page-subtitle" class="text-secondary">Aperçu global et alertes d'équipements</p>
+            </div>
+            <div class="header-actions">
+                <button class="btn btn-primary" id="btn-add-employee-trigger">
+                    <i class="fa-solid fa-user-plus"></i>
+                    <span>Nouveau Collaborateur</span>
+                </button>
+                <button class="btn btn-secondary" id="btn-export-excel" title="Exporter toutes les données vers Excel" style="background: #16a34a; color: white; border-color: #16a34a;">
+                    <i class="fa-solid fa-file-excel"></i>
+                    <span>Export Excel</span>
+                </button>
+            </div>
+        </header>
+
+        <!-- TAB: Dashboard -->
+        <section id="tab-dashboard" class="tab-content active">
+            <div class="metrics-grid">
+                <div class="metric-card">
+                    <div class="metric-icon blue"><i class="fa-solid fa-users"></i></div>
+                    <div class="metric-data">
+                        <span class="value" id="stat-employees">0</span>
+                        <span class="label">Collaborateurs</span>
+                    </div>
+                </div>
+                <div class="metric-card">
+                    <div class="metric-icon green"><i class="fa-solid fa-box-archive"></i></div>
+                    <div class="metric-data">
+                        <span class="value" id="stat-active-epi">0</span>
+                        <span class="label">EPI attribués</span>
+                    </div>
+                </div>
+                <div class="metric-card">
+                    <div class="metric-icon yellow"><i class="fa-solid fa-triangle-exclamation"></i></div>
+                    <div class="metric-data">
+                        <span class="value" id="stat-lost-damaged">0</span>
+                        <span class="label">Événements signalés</span>
+                    </div>
+                </div>
+            </div>
+            <div class="dashboard-charts-layout">
+                <div class="card card-alerts">
+                    <div class="card-header">
+                        <h3><i class="fa-solid fa-bell text-warning"></i> Alertes</h3>
+                    </div>
+                    <div class="card-body">
+                        <div class="alerts-list" id="alerts-container"></div>
+                    </div>
+                </div>
+                <div class="card card-chart">
+                    <div class="card-header">
+                        <h3>Répartition des anomalies</h3>
+                    </div>
+                    <div class="card-body" id="chart-card-body">
+                        <canvas id="chart-anomalies"></canvas>
+                    </div>
+                </div>
+            </div>
+        </section>
+
+        <!-- TAB: Personnel -->
+        <section id="tab-personnel" class="tab-content">
+            <div class="card">
+                <div class="table-controls">
+                    <div class="search-box">
+                        <i class="fa-solid fa-magnifying-glass"></i>
+                        <input type="text" id="search-employee" placeholder="Rechercher un collaborateur...">
+                    </div>
+                </div>
+                <div class="table-responsive">
+                    <table class="data-table">
+                        <thead>
+                            <tr>
+                                <th>Collaborateur</th>
+                                <th>Poste</th>
+                                <th>Date d'entrée</th>
+                                <th>EPI Attribués</th>
+                                <th>Coût Dotations (€)</th>
+                                <th>Dernière dotation</th>
+                                <th class="text-right">Actions</th>
+                            </tr>
+                        </thead>
+                        <tbody id="employees-table-body"></tbody>
+                    </table>
+                </div>
+            </div>
+        </section>
+
+        <!-- TAB: Attributions -->
+        <section id="tab-attributions" class="tab-content">
+            <div class="attributions-layout">
+                <div class="card card-form">
+                    <div class="card-header"><h3>Nouvelle Dotation d'EPI</h3></div>
+                    <div class="card-body">
+                        <form id="form-assign-epi">
+                            <div class="form-group">
+                                <label for="assign-select-employee">Collaborateur *</label>
+                                <select id="assign-select-employee" required>
+                                    <option value="">Sélectionner un collaborateur...</option>
+                                </select>
+                            </div>
+                            <div class="form-group">
+                                <label for="assign-select-epi">Équipement (EPI) *</label>
+                                <select id="assign-select-epi" required>
+                                    <option value="">Sélectionner un équipement...</option>
+                                </select>
+                            </div>
+                            <div class="form-row">
+                                <div class="form-group">
+                                    <label for="assign-size">Taille / Pointure</label>
+                                    <select id="assign-size" required><option value="">Sélectionner d'abord un EPI...</option></select>
+                                </div>
+                                <div class="form-group">
+                                    <label for="assign-date">Date d'attribution *</label>
+                                    <input type="date" id="assign-date" required>
+                                </div>
+                            </div>
+
+                            <div class="form-group">
+                                <label for="assign-notes">Notes</label>
+                                <textarea id="assign-notes" placeholder="Commentaires..." rows="2"></textarea>
+                            </div>
+                            <button type="submit" class="btn btn-primary btn-block">
+                                <i class="fa-solid fa-circle-check"></i> Enregistrer la dotation
+                            </button>
+                        </form>
+                    </div>
+                </div>
+                <div class="card card-active-assignments">
+                    <div class="card-header"><h3>Dotations Actives en Service</h3></div>
+                    <div class="table-controls">
+                        <div class="search-box">
+                            <i class="fa-solid fa-magnifying-glass"></i>
+                            <input type="text" id="search-attribution" placeholder="Filtrer...">
+                        </div>
+                    </div>
+                    <div class="table-responsive">
+                        <table class="data-table">
+                            <thead>
+                                <tr>
+                                    <th>Employé</th>
+                                    <th>EPI</th>
+                                    <th>Attribution</th>
+
+                                    <th>Taille</th>
+                                    <th>État</th>
+                                    <th class="text-right">Actions</th>
+                                </tr>
+                            </thead>
+                            <tbody id="attributions-table-body"></tbody>
+                        </table>
+                    </div>
+                </div>
+            </div>
+        </section>
+
+        <!-- TAB: Équipements -->
+        <section id="tab-equipements" class="tab-content">
+            <div class="card">
+                <div class="card-header flex-header">
+                    <h3>Catalogue & Statuts des EPI</h3>
+                    <div style="display:flex; gap:10px; align-items:center; flex-wrap:wrap;">
+                        <input type="text" id="search-epi" class="form-control" placeholder="🔍 Rechercher un EPI..." style="width: 220px; height: 35px; font-size: 0.88rem; padding: 4px 10px; border-radius: 6px; border: 1px solid #cbd5e1;">
+                        <select id="epi-category-filter" class="form-control" style="width: auto; padding: 4px 10px; font-size: 0.88rem; height: 35px; border-radius: 6px; border: 1px solid #cbd5e1;" onchange="renderEquipementsTable()">
+                            <option value="all">Toutes catégories</option>
+                            <option value="tete">🪖 Tête</option>
+                            <option value="visage">🥽 Visage</option>
+                            <option value="corps">🦺 Corps</option>
+                            <option value="mains">🧤 Mains</option>
+                            <option value="pieds">👢 Pieds</option>
+                        </select>
+                        <select id="epi-view-filter" class="form-control" style="width: auto; padding: 4px 10px; font-size: 0.88rem; height: 35px; border-radius: 6px; border: 1px solid #cbd5e1;" onchange="renderEquipementsTable()">
+                            <option value="all">Tous les EPI</option>
+                            <option value="available">En stock disponible</option>
+                            <option value="in_service">En cours d'utilisation (Actif)</option>
+                        </select>
+                        <button class="btn btn-secondary btn-sm" id="btn-open-invoice-modal" style="height: 35px; display: flex; align-items: center; gap: 5px; background: #059669; color: white; border-color: #059669;" onclick="switchTab('finances')">
+                            <i class="fa-solid fa-receipt"></i> Saisir Facture / Appro
+                        </button>
+                        <button class="btn btn-primary btn-sm" id="btn-add-epi-trigger" style="height: 35px; display: flex; align-items: center; gap: 5px;">
+                            <i class="fa-solid fa-plus"></i> Ajouter un EPI
+                        </button>
+                    </div>
+                </div>
+                <div class="table-responsive">
+                    <table class="data-table">
+                        <thead>
+                            <tr>
+                                <th>Équipement (EPI)</th>
+                                <th>Tailles / Remarques</th>
+                                <th>Prix Unitaire (€)</th>
+                                <th>Stock Disponible</th>
+                                <th>Durée de vie</th>
+                                <th>Dotations Actives</th>
+                                <th>Statut</th>
+                                <th class="text-right">Modifier</th>
+                            </tr>
+                        </thead>
+                        <tbody id="equipements-table-body"></tbody>
+                    </table>
+                </div>
+            </div>
+        </section>
+
+        <!-- TAB: Historique -->
+        <section id="tab-historique" class="tab-content">
+            <div class="card">
+                <div class="card-header flex-header">
+                    <h3>Journal des Événements</h3>
+                    <button class="btn btn-secondary btn-sm" id="btn-clear-history">
+                        <i class="fa-solid fa-trash-can"></i> Effacer
+                    </button>
+                </div>
+                <div class="table-controls">
+                    <div class="search-box">
+                        <i class="fa-solid fa-magnifying-glass"></i>
+                        <input type="text" id="search-history" placeholder="Filtrer l'historique...">
+                    </div>
+                </div>
+                <div class="table-responsive">
+                    <table class="data-table">
+                        <thead>
+                            <tr>
+                                <th>Date</th>
+                                <th>Collaborateur</th>
+                                <th>EPI</th>
+                                <th>Action</th>
+                                <th>Notes</th>
+                            </tr>
+                        </thead>
+                        <tbody id="history-table-body"></tbody>
+                    </table>
+                </div>
+            </div>
+        </section>
+    
+        <!-- TAB: Finances & Factures -->
+        <section id="tab-finances" class="tab-content">
+            <!-- Cards métriques financières -->
+            <div class="metrics-grid">
+                <div class="metric-card">
+                    <div class="metric-icon green" style="background: rgba(16, 185, 129, 0.15); color: #10b981;"><i class="fa-solid fa-sack-dollar"></i></div>
+                    <div class="metric-data">
+                        <span class="value" id="stat-budget-total">0.00 €</span>
+                        <span class="label">Budget Total Achats EPI</span>
+                    </div>
+                </div>
+                <div class="metric-card">
+                    <div class="metric-icon blue" style="background: rgba(2, 132, 199, 0.15); color: #0284c7;"><i class="fa-solid fa-vest"></i></div>
+                    <div class="metric-data">
+                        <span class="value" id="stat-attributed-cost">0.00 €</span>
+                        <span class="label">Valeur EPI en Service</span>
+                    </div>
+                </div>
+                <div class="metric-card">
+                    <div class="metric-icon yellow" style="background: rgba(245, 158, 11, 0.15); color: #f59e0b;"><i class="fa-solid fa-user-tag"></i></div>
+                    <div class="metric-data">
+                        <span class="value" id="stat-avg-emp-cost">0.00 €</span>
+                        <span class="label">Coût Moyen / Collaborateur</span>
+                    </div>
+                </div>
+                <div class="metric-card">
+                    <div class="metric-icon purple" style="background: rgba(168, 85, 247, 0.15); color: #a855f7;"><i class="fa-solid fa-file-invoice"></i></div>
+                    <div class="metric-data">
+                        <span class="value" id="stat-invoices-count">0</span>
+                        <span class="label">Factures enregistrées</span>
+                    </div>
+                </div>
+            </div>
+
+            <!-- Formulaire de saisie de facture & Graphique d'évolution des prix -->
+            <div class="attributions-layout" style="margin-bottom: 2rem;">
+                <!-- Gauche : Formulaire Saisie Facture -->
+                <div class="card card-form">
+                    <div class="card-header">
+                        <h3><i class="fa-solid fa-receipt text-success"></i> Saisie d'une Facture / Entrée d'EPI</h3>
+                    </div>
+                    <div class="card-body">
+                        <form id="form-add-invoice">
+                            <div class="form-row">
+                                <div class="form-group">
+                                    <label for="inv-number">N° de Facture / Réf. *</label>
+                                    <input type="text" id="inv-number" required placeholder="Ex: FAC-2026-089">
+                                </div>
+                                <div class="form-group">
+                                    <label for="inv-supplier">Fournisseur *</label>
+                                    <input type="text" id="inv-supplier" required placeholder="Ex: ERGOS, Würth, Lyreco...">
+                                </div>
+                            </div>
+                            <div class="form-row">
+                                <div class="form-group">
+                                    <label for="inv-date">Date de Facture *</label>
+                                    <input type="date" id="inv-date" required>
+                                </div>
+                                <div class="form-group">
+                                    <label for="inv-epi">Équipement (EPI) *</label>
+                                    <select id="inv-epi" required>
+                                        <option value="">Sélectionner un EPI...</option>
+                                    </select>
+                                </div>
+                            </div>
+                            <div class="form-row">
+                                <div class="form-group">
+                                    <label for="inv-size">Taille / Pointure *</label>
+                                    <select id="inv-size" required>
+                                        <option value="">Sélectionner une taille...</option>
+                                    </select>
+                                </div>
+                                <div class="form-group">
+                                    <label for="inv-qty">Quantité Reçue *</label>
+                                    <input type="number" id="inv-qty" min="1" required placeholder="Ex: 10">
+                                </div>
+                                <div class="form-group">
+                                    <label for="inv-unit-price">Prix Unitaire (€ HT) *</label>
+                                    <input type="number" step="0.01" min="0" id="inv-unit-price" required placeholder="Ex: 42.50">
+                                </div>
+                            </div>
+                            <div class="form-group">
+                                <div class="checkbox-container">
+                                    <input type="checkbox" id="inv-update-catalog-price" checked>
+                                    <label for="inv-update-catalog-price">Mettre à jour le prix catalogue actuel de cet EPI</label>
+                                </div>
+                            </div>
+                            <div class="form-group">
+                                <label for="inv-notes">Notes / Référence Bon de Commande</label>
+                                <textarea id="inv-notes" rows="2" placeholder="Ex: Commande réappro de printemps..."></textarea>
+                            </div>
+                            <button type="submit" class="btn btn-primary btn-block" style="background: linear-gradient(135deg, var(--brand-success), #059669); border:none;">
+                                <i class="fa-solid fa-plus-circle"></i> Enregistrer la Facture & Ajouter au Stock
+                            </button>
+                        </form>
+                    </div>
+                </div>
+
+                <!-- Droite : Graphique d'Évolution des Prix -->
+                <div class="card card-active-assignments">
+                    <div class="card-header flex-header">
+                        <h3><i class="fa-solid fa-chart-line text-primary"></i> Évolution du Prix par EPI</h3>
+                        <select id="select-price-trend-epi" class="form-control" style="width: 240px; padding: 4px 8px; font-size: 0.85rem; border-radius: 6px; background: #0f172a; color: white; border: 1px solid #334155;">
+                            <option value="">Sélectionner un EPI...</option>
+                        </select>
+                    </div>
+                    <div class="card-body">
+                        <div id="price-trend-summary-badge" style="margin-bottom: 12px; font-size: 0.9rem; font-weight: 600;">
+                            <!-- Populated by JS -->
+                        </div>
+                        <div style="height: 200px; position: relative;">
+                            <canvas id="chart-price-trend"></canvas>
+                        </div>
+                        <div style="margin-top: 15px; max-height: 140px; overflow-y: auto;">
+                            <table class="data-table" style="font-size: 0.83rem;">
+                                <thead>
+                                    <tr>
+                                        <th>Date</th>
+                                        <th>N° Facture</th>
+                                        <th>Fournisseur</th>
+                                        <th>Prix Unitaire</th>
+                                        <th>Tendance</th>
+                                    </tr>
+                                </thead>
+                                <tbody id="price-history-table-body">
+                                    <!-- Injected by JS -->
+                                </tbody>
+                            </table>
+                        </div>
+                    </div>
+                </div>
+            </div>
+
+            <!-- Layout Row 2 : Journal des Factures & Coût par Collaborateur -->
+            <div class="attributions-layout">
+                <!-- Journal des Factures -->
+                <div class="card">
+                    <div class="card-header flex-header">
+                        <h3><i class="fa-solid fa-file-invoice text-success"></i> Journal des Factures & Réceptions</h3>
+                        <div class="search-box" style="width: 200px;">
+                            <i class="fa-solid fa-magnifying-glass"></i>
+                            <input type="text" id="search-invoice" placeholder="Filtrer factures...">
+                        </div>
+                    </div>
+                    <div class="table-responsive" style="max-height: 340px; overflow-y: auto;">
+                        <table class="data-table">
+                            <thead>
+                                <tr>
+                                    <th>Date</th>
+                                    <th>N° Facture</th>
+                                    <th>Fournisseur</th>
+                                    <th>Équipement</th>
+                                    <th>Taille</th>
+                                    <th>Qté</th>
+                                    <th>P.U. (€)</th>
+                                    <th>Total (€)</th>
+                                    <th class="text-right">Action</th>
+                                </tr>
+                            </thead>
+                            <tbody id="invoices-table-body"></tbody>
+                        </table>
+                    </div>
+                </div>
+
+                <!-- Coût par Collaborateur -->
+                <div class="card">
+                    <div class="card-header flex-header">
+                        <h3><i class="fa-solid fa-users-rectangle text-warning"></i> Coût des Dotations par Collaborateur</h3>
+                        <div class="search-box" style="width: 180px;">
+                            <i class="fa-solid fa-magnifying-glass"></i>
+                            <input type="text" id="search-employee-cost" placeholder="Rechercher...">
+                        </div>
+                    </div>
+                    <div class="table-responsive" style="max-height: 340px; overflow-y: auto;">
+                        <table class="data-table">
+                            <thead>
+                                <tr>
+                                    <th>Collaborateur</th>
+                                    <th>Poste</th>
+                                    <th>EPIs Actifs</th>
+                                    <th>Investissement Total (€)</th>
+                                </tr>
+                            </thead>
+                            <tbody id="employee-costs-table-body"></tbody>
+                        </table>
+                    </div>
+                </div>
+            </div>
+        </section>
+
+    </main>
+</div>
+
+<!-- MODAL: Ajouter Collaborateur -->
+<div class="modal-overlay" id="modal-add-employee">
+    <div class="modal-box">
+        <div class="modal-header">
+            <h3>Ajouter un Collaborateur</h3>
+            <button class="btn-close" id="btn-close-modal-add"><i class="fa-solid fa-xmark"></i></button>
+        </div>
+        <div class="modal-body">
+            <form id="form-add-employee">
+                <div class="form-group">
+                    <label for="emp-name">Nom complet *</label>
+                    <input type="text" id="emp-name" required placeholder="Ex: Jean Dupont">
+                </div>
+                <div class="form-group">
+                    <label for="emp-role">Poste occupé *</label>
+                    <input type="text" id="emp-role" required placeholder="Ex: Opérateur de Tri">
+                </div>
+                <div class="form-group">
+                    <label for="emp-date-entry">Date d'intégration *</label>
+                    <input type="date" id="emp-date-entry" required>
+                </div>
+                <div class="modal-actions">
+                    <button type="button" class="btn btn-secondary" id="btn-cancel-add">Annuler</button>
+                    <button type="submit" class="btn btn-primary">Enregistrer</button>
+                </div>
+            </form>
+        </div>
+    </div>
+</div>
+
+<!-- MODAL: Incident / Remplacement -->
+<div class="modal-overlay" id="modal-incident">
+    <div class="modal-box">
+        <div class="modal-header">
+            <h3>Signaler une Anomalie / Remplacer EPI</h3>
+            <button class="btn-close" id="btn-close-modal-incident"><i class="fa-solid fa-xmark"></i></button>
+        </div>
+        <div class="modal-body">
+            <form id="form-declare-incident">
+                <input type="hidden" id="incident-attr-id">
+                <div class="form-group">
+                    <label>Employé</label>
+                    <p class="modal-static-text" id="incident-emp-name">-</p>
+                </div>
+                <div class="form-group">
+                    <label>Équipement</label>
+                    <p class="modal-static-text" id="incident-epi-name">-</p>
+                </div>
+                <div class="form-group">
+                    <label for="incident-reason">Motif *</label>
+                    <select id="incident-reason" required>
+                        <option value="">Sélectionner une raison...</option>
+                        <option value="Usé">Usure normale</option>
+                        <option value="Perdu">Perte accidentelle</option>
+                        <option value="Abîmé">Détérioration accidentelle</option>
+                        <option value="Taille">Problème de taille</option>
+                    </select>
+                </div>
+                <div class="form-group">
+                    <div class="checkbox-container">
+                        <input type="checkbox" id="incident-replace-now" checked>
+                        <label for="incident-replace-now">Remplacer immédiatement</label>
+                    </div>
+                </div>
+                <div class="form-group" id="incident-replace-size-container">
+                    <label for="incident-replace-size">Taille de remplacement *</label>
+                    <select id="incident-replace-size">
+                        <option value="">Sélectionner une taille...</option>
+                    </select>
+                </div>
+                <div class="form-group">
+                    <label for="incident-notes">Notes</label>
+                    <textarea id="incident-notes" rows="2"></textarea>
+                </div>
+                <div class="modal-actions">
+                    <button type="button" class="btn btn-secondary" id="btn-cancel-incident">Annuler</button>
+                    <button type="submit" class="btn btn-danger">Enregistrer</button>
+                </div>
+            </form>
+        </div>
+    </div>
+</div>
+
+<!-- MODAL: Modifier Stock -->
+<div class="modal-overlay" id="modal-edit-stock">
+    <div class="modal-box">
+        <div class="modal-header">
+            <h3>Modifier les paramètres de Stock</h3>
+            <button class="btn-close" id="btn-close-modal-stock"><i class="fa-solid fa-xmark"></i></button>
+        </div>
+        <div class="modal-body">
+            <form id="form-edit-stock">
+                <input type="hidden" id="stock-epi-name">
+                <div class="form-group">
+                    <label for="stock-epi-rename">Nom de l'EPI</label>
+                    <input type="text" id="stock-epi-rename" required>
+                </div>
+                <div class="form-group">
+                    <label>Tailles et Quantités *</label>
+                    <div id="edit-epi-sizes-container">
+                        <!-- Populated by JS -->
+                    </div>
+                    <button type="button" id="btn-add-size-row-edit" class="btn btn-secondary btn-sm" style="margin-top:5px;"><i class="fa-solid fa-plus"></i> Ajouter une taille</button>
+                </div>
+                <div class="form-group">
+                    <label for="stock-min">Seuil d'Alerte (Stock Min) *</label>
+                    <input type="number" id="stock-min" min="0" required>
+                </div>
+                <div class="form-group">
+                    <label for="stock-lifespan">Durée de vie (mois) (laisser vide si N/A)</label>
+                    <input type="number" id="stock-lifespan" min="1">
+                </div>
+                <div class="form-group">
+                    <label for="stock-notes">Tailles / Détails du Stock</label>
+                    <textarea id="stock-notes" placeholder="Ex: (2)M, (4)L..." rows="2"></textarea>
+                </div>
+                <div class="modal-actions">
+                    <button type="button" class="btn btn-secondary" id="btn-cancel-stock">Annuler</button>
+                    <button type="submit" class="btn btn-primary">Enregistrer</button>
+                </div>
+            </form>
+        </div>
+    </div>
+</div>
+
+<!-- MODAL: Ajouter EPI -->
+<div class="modal-overlay" id="modal-add-epi">
+    <div class="modal-box">
+        <div class="modal-header">
+            <h3>Ajouter un EPI au Catalogue</h3>
+            <button class="btn-close" id="btn-close-modal-add-epi"><i class="fa-solid fa-xmark"></i></button>
+        </div>
+        <div class="modal-body">
+            <form id="form-add-epi">
+                <div class="form-group">
+                    <label for="new-epi-name">Nom de l'EPI *</label>
+                    <input type="text" id="new-epi-name" placeholder="Ex: Casque de chantier" required>
+                </div>
+                <div class="form-group">
+                    <label for="new-epi-notes">Tailles / Détails du Stock</label>
+                    <textarea id="new-epi-notes" placeholder="Ex: (2)S, (4)M, (3)L..." rows="2"></textarea>
+                </div>
+                <div class="form-group">
+                    <label>Tailles et Quantités *</label>
+                    <div id="new-epi-sizes-container">
+                        <div class="size-row" style="display:flex; gap:10px; margin-bottom:5px;">
+                            <input type="text" class="size-name" placeholder="Taille (ex: Standard, L, 43)" required style="flex:2;">
+                            <input type="number" class="size-qty" min="0" placeholder="Qté" required style="flex:1;">
+                            <button type="button" class="btn btn-secondary btn-remove-size" style="padding: 0 10px;"><i class="fa-solid fa-trash"></i></button>
+                        </div>
+                    </div>
+                    <button type="button" id="btn-add-size-row-new" class="btn btn-secondary btn-sm" style="margin-top:5px;"><i class="fa-solid fa-plus"></i> Ajouter une taille</button>
+                </div>
+                <div class="form-group">
+                    <label for="new-epi-min">Seuil d'alerte global (min)</label>
+                    <input type="number" id="new-epi-min" min="0" value="2">
+                </div>
+                <div class="form-group">
+                    <label for="new-epi-lifespan">Durée de vie en mois (laisser vide si N/A)</label>
+                    <input type="number" id="new-epi-lifespan" min="1" placeholder="Ex: 12">
+                </div>
+                <div class="modal-actions">
+                    <button type="button" class="btn btn-secondary" id="btn-cancel-add-epi">Annuler</button>
+                    <button type="submit" class="btn btn-primary">Ajouter au catalogue</button>
+                </div>
+            </form>
+        </div>
+    </div>
+</div>
+
+<!-- Zone d'impression (invisible en mode normal) -->
+<div class="print-container" id="print-sheet-layout">
+    <div class="print-header">
+        <div class="print-logo">
+            <i class="fa-solid fa-shield-halved"></i>
+            <div><h2>PAPREC GROUP</h2><span>Direction Santé et Sécurité au Travail</span></div>
+        </div>
+        <div class="print-title-box">
+            <h3>FICHE INDIVIDUELLE DE REMISE D'EPI</h3>
+            <p>Décharge de responsabilité & conformité</p>
+        </div>
+    </div>
+    <div class="print-meta-grid">
+        <div><strong>Bénéficiaire :</strong><p id="print-emp-name">-</p></div>
+        <div><strong>Poste :</strong><p id="print-emp-role">-</p></div>
+        <div><strong>Date d'édition :</strong><p id="print-date">-</p></div>
+    </div>
+    <div class="print-body">
+        <p class="print-legal-text">Je soussigné(e) certifie avoir reçu ce jour, à titre individuel et gratuit, les Équipements de Protection Individuelle (EPI) listés ci-dessous, conformes aux exigences réglementaires de sécurité applicables sur mon poste de travail. Je m'engage à les porter obligatoirement et conformément aux consignes d'utilisation qui m'ont été transmises.</p>
+        <table class="print-table">
+            <thead>
+                <tr>
+                    <th>Équipement remis</th>
+                    <th>Taille</th>
+                    <th>Date de remise</th>
+                    <th>Date de péremption</th>
+                    <th>État</th>
+                    <th>Valeur (€)</th>
+                    <th>Notes</th>
+                </tr>
+            </thead>
+            <tbody id="print-table-body"></tbody>
+        </table>
+    </div>
+    <div class="print-signatures">
+        <div class="signature-block">
+            <span>Le Superviseur / Employeur</span>
+            <div class="signature-box">Signature & cachet</div>
+        </div>
+        <div class="signature-block">
+            <span>Le Salarié</span>
+            <p class="signature-note">("Bon pour accord et port obligatoire")</p>
+            <div class="signature-box">Signature</div>
+        </div>
+    </div>
+</div>
+
+
+</body>
+</html>
