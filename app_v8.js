@@ -336,7 +336,7 @@ let epiList = (rawEpiList || DEFAULT_EPI)
 
 let rawEmployees = null;
 try { rawEmployees = JSON.parse(localStorage.getItem("paprec_employees")); } catch(err) {}
-let employees = (rawEmployees || MOCK_EMPLOYEES).filter(e => e !== null && e !== undefined && e.id && e.name);
+let employees = (rawEmployees || MOCK_EMPLOYEES).filter(e => e !== null && e !== undefined && e.id && e.name && e.id !== "rh_global_state" && !e.name.startsWith("{"));
 
 let rawAttributions = null;
 try { rawAttributions = JSON.parse(localStorage.getItem("paprec_attributions")); } catch(err) {}
@@ -498,7 +498,7 @@ async function loadData() {
 
             // Only overwrite local data if cloud has actual records
             // (prevents cloud empty tables from wiping local data on first sync)
-            if (cloudEmp !== null && cloudEmp.length > 0) { employees = cloudEmp; changed = true; }
+            if (cloudEmp !== null && cloudEmp.length > 0) { employees = cloudEmp.filter(e => e && e.id && e.id !== "rh_global_state" && e.name && !e.name.startsWith("{")); changed = true; }
             else if (cloudEmp !== null && cloudEmp.length === 0 && employees.length > 0) {
                 // Push local employees to empty cloud DB
                 await dbInsert('employees', employees);
@@ -2225,146 +2225,3 @@ function initRealtimeCloudSync() {
 }
 
 
-// ========================================================
-// HYBRID ENTERPRISE ENGINE (INDEXEDDB + SUPABASE REALTIME) - EPI REGISTRE
-// ========================================================
-const HYBRID_DB_NAME = "PaprecEPI_HybridStore";
-const HYBRID_DB_VERSION = 1;
-
-function openIndexedDB() {
-    return new Promise((resolve, reject) => {
-        const req = indexedDB.open(HYBRID_DB_NAME, HYBRID_DB_VERSION);
-        req.onupgradeneeded = (e) => {
-            const db = e.target.result;
-            if (!db.objectStoreNames.contains("kv_store")) {
-                db.createObjectStore("kv_store");
-            }
-        };
-        req.onsuccess = (e) => resolve(e.target.result);
-        req.onerror = (e) => reject(e.target.error);
-    });
-}
-
-async function idbSet(key, val) {
-    try {
-        const db = await openIndexedDB();
-        const tx = db.transaction("kv_store", "readwrite");
-        tx.objectStore("kv_store").put(val, key);
-    } catch(e) {}
-}
-
-async function idbGet(key) {
-    try {
-        const db = await openIndexedDB();
-        const tx = db.transaction("kv_store", "readonly");
-        return new Promise((resolve) => {
-            const req = tx.objectStore("kv_store").get(key);
-            req.onsuccess = () => resolve(req.result);
-            req.onerror = () => resolve(null);
-        });
-    } catch(e) { return null; }
-}
-
-let lastEpiSyncTimestamp = 0;
-let isEpiSyncing = false;
-
-async function syncEpiHybridState() {
-    if (isEpiSyncing) return;
-    isEpiSyncing = true;
-
-    try {
-        // Fetch Cloud Master
-        const cloudRows = await dbGet('history');
-        const cloudEpi = await dbGet('epi_list');
-        const cloudAttributions = await dbGet('attributions');
-        
-        let hasChanges = false;
-
-        if (cloudEpi && cloudEpi.length > 0) {
-            // Update local state if cloud data exists
-            epiList = cloudEpi.map(e => {
-                let parsedSizes = [];
-                let rawNotes = e.notes || "";
-                let cleanNotes = rawNotes;
-                if (rawNotes.includes("__SIZES_JSON__")) {
-                    const parts = rawNotes.split("__SIZES_JSON__");
-                    cleanNotes = parts[0].trim();
-                    try { parsedSizes = JSON.parse(parts[1]); } catch(err) { parsedSizes = [{name:"Standard", stock: e.stock || 0}]; }
-                } else if (Array.isArray(e.sizes)) {
-                    parsedSizes = e.sizes;
-                } else {
-                    parsedSizes = [{name:"Standard", stock: e.stock || 0}];
-                }
-                return {
-                    name: e.name,
-                    sizes: parsedSizes,
-                    minStock: e.min_stock !== undefined ? e.min_stock : (e.minStock || 2),
-                    lifespan: e.lifespan_months !== undefined ? e.lifespan_months : e.lifespan,
-                    unitPrice: typeof e.unitPrice === 'number' ? e.unitPrice : getEpiUnitPrice(e.name),
-                    notes: cleanNotes
-                };
-            });
-            hasChanges = true;
-        }
-
-        if (cloudAttributions && cloudAttributions.length > 0) {
-            attributions = cloudAttributions;
-            hasChanges = true;
-        }
-
-        if (hasChanges) {
-            // Persist into IndexedDB and LocalStorage
-            await idbSet("paprec_epi_list", epiList);
-            await idbSet("paprec_attributions", attributions);
-            await idbSet("paprec_history", history);
-            await idbSet("paprec_epi_invoices", invoices);
-
-            localStorage.setItem("paprec_epi_list", JSON.stringify(epiList));
-            localStorage.setItem("paprec_attributions", JSON.stringify(attributions));
-            localStorage.setItem("paprec_history", JSON.stringify(history));
-            localStorage.setItem("paprec_epi_invoices", JSON.stringify(invoices));
-
-            updateStats();
-            renderAll();
-        }
-        updateEpiSyncBadge(true, "Cloud & IndexedDB Actif");
-    } catch(e) {
-        updateEpiSyncBadge(false, "Stockage Hors-Ligne (IndexedDB)");
-    } finally {
-        isEpiSyncing = false;
-    }
-}
-
-function initEpiHybridEngine() {
-    // 1. Load from IndexedDB on startup for 0ms offline startup
-    idbGet("paprec_epi_list").then(val => {
-        if (val && Array.isArray(val) && val.length > 0) {
-            epiList = val;
-            updateStats();
-            renderAll();
-        }
-    });
-
-    // 2. Sync from Cloud Master
-    syncEpiHybridState();
-
-    // 3. Fast 2-second background sync
-    setInterval(syncEpiHybridState, 2000);
-
-    // 4. Auto-sync on window focus
-    window.addEventListener('focus', syncEpiHybridState);
-    document.addEventListener('visibilitychange', () => {
-        if (!document.hidden) syncEpiHybridState();
-    });
-}
-
-function updateEpiSyncBadge(isOnline, text) {
-    const badge = document.getElementById("cloud-sync-status-badge");
-    if (!badge) return;
-    badge.innerHTML = isOnline 
-        ? `<span style="color: #10b981;"><i class="fa-solid fa-shield-halved"></i> ${text}</span>`
-        : `<span style="color: #f59e0b;"><i class="fa-solid fa-hard-drive"></i> ${text}</span>`;
-}
-
-// Start Hybrid Engine
-initEpiHybridEngine();
