@@ -378,9 +378,8 @@
                             <div class="form-row">
                                 <div class="form-group">
                                     <label for="inv-size">Taille / Pointure *</label>
-                                    <select id="inv-size" required>
-                                        <option value="">Sélectionner une taille...</option>
-                                    </select>
+                                    <input type="text" id="inv-size" list="inv-size-list" required placeholder="Saisir ou choisir une taille (Ex: XL, 42, M...)">
+                                    <datalist id="inv-size-list"></datalist>
                                 </div>
                                 <div class="form-group">
                                     <label for="inv-qty">Quantité Reçue *</label>
