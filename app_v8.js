@@ -1809,8 +1809,8 @@ function renderFinancesTab() {
 
 function populateInvoiceSelects() {
     const selectEpi = document.getElementById("inv-epi");
-    const selectSize = document.getElementById("inv-size");
-    if (!selectEpi || !selectSize) return;
+    const datalist = document.getElementById("inv-size-list");
+    if (!selectEpi) return;
 
     const currentEpi = selectEpi.value;
     selectEpi.innerHTML = `<option value="">Sélectionner un EPI...</option>`;
@@ -1824,16 +1824,18 @@ function populateInvoiceSelects() {
 
     selectEpi.onchange = function() {
         const epiName = this.value;
-        selectSize.innerHTML = `<option value="">Sélectionner une taille...</option>`;
+        if (datalist) datalist.innerHTML = "";
         if (!epiName) return;
         const epiObj = epiList.find(e => e.name === epiName);
-        if (!epiObj || !epiObj.sizes) return;
-        epiObj.sizes.forEach(s => {
-            const opt = document.createElement("option");
-            opt.value = s.name;
-            opt.innerText = `${s.name} (Stock actuel: ${s.stock})`;
-            selectSize.appendChild(opt);
-        });
+        if (!epiObj) return;
+
+        if (epiObj.sizes && datalist) {
+            epiObj.sizes.forEach(s => {
+                const opt = document.createElement("option");
+                opt.value = s.name;
+                datalist.appendChild(opt);
+            });
+        }
 
         // Pre-fill default price
         const priceInput = document.getElementById("inv-unit-price");
