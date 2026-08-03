@@ -799,6 +799,9 @@ function renderAttributionsTable() {
             <td><span class="badge ${stateBadgeClass}">${attr.state}</span></td>
             <td class="text-right">
                 <div class="action-buttons">
+                    <button class="btn-icon return-btn" onclick="openRestitutionModal('${attr.id}')" title="Restituer l'équipement / Retour en Stock (Fin de contrat, départ...)">
+                        <i class="fa-solid fa-rotate-left" style="color: #2563eb;"></i>
+                    </button>
                     <button class="btn-icon replace-btn" onclick="openIncidentModal('${attr.id}')" title="Signaler Incident / Remplacer">
                         <i class="fa-solid fa-rotate"></i>
                     </button>
@@ -1378,6 +1381,93 @@ document.getElementById("form-declare-incident").addEventListener("submit", asyn
 
     saveLocalState();
     modalIncident.classList.remove("active");
+});
+
+// --- MODAL RESTITUTION EQUIPMENT (RETOUR EN STOCK) ---
+window.openRestitutionModal = function(id) {
+    const attr = attributions.find(a => a.id === id);
+    if (!attr) return;
+
+    const modal = document.getElementById("modal-restitution");
+    if (!modal) return;
+
+    document.getElementById("restitution-attr-id").value = attr.id;
+    document.getElementById("restitution-emp-name").innerText = attr.employeeName;
+    document.getElementById("restitution-epi-name").innerText = `${attr.epi} (Taille: ${attr.size || 'Standard'})`;
+    document.getElementById("restitution-destination").value = "stock_ok";
+    document.getElementById("restitution-reason").value = "Fin de contrat Intérim / Fin de mission";
+    document.getElementById("restitution-date").value = new Date().toISOString().split('T')[0];
+    document.getElementById("restitution-notes").value = "";
+
+    modal.classList.add("active");
+};
+
+// Modal Restitution close buttons
+document.getElementById("btn-close-modal-restitution")?.addEventListener("click", () => {
+    document.getElementById("modal-restitution")?.classList.remove("active");
+});
+document.getElementById("btn-cancel-restitution")?.addEventListener("click", () => {
+    document.getElementById("modal-restitution")?.classList.remove("active");
+});
+
+// Form Restitution Submit
+document.getElementById("form-restitution")?.addEventListener("submit", async function(e) {
+    e.preventDefault();
+    const attrId = document.getElementById("restitution-attr-id").value;
+    const attr = attributions.find(a => a.id === attrId);
+    if (!attr) return;
+
+    const destination = document.getElementById("restitution-destination").value;
+    const reason = document.getElementById("restitution-reason").value;
+    const dateVal = document.getElementById("restitution-date").value || new Date().toISOString().split('T')[0];
+    const notesVal = document.getElementById("restitution-notes").value.trim();
+
+    let stockMsg = "Réformé (Non remis en stock)";
+
+    // If Remise en stock (stock_ok), increment size stock by +1
+    if (destination === "stock_ok") {
+        const epiObj = epiList.find(item => item.name === attr.epi);
+        if (epiObj) {
+            if (!epiObj.sizes || epiObj.sizes.length === 0) {
+                epiObj.sizes = [{ name: attr.size || "Standard", stock: 0 }];
+            }
+            let sizeMatch = epiObj.sizes.find(s => s.name === attr.size);
+            if (!sizeMatch) sizeMatch = epiObj.sizes[0];
+            
+            sizeMatch.stock += 1;
+            stockMsg = `Remis en stock (+1 en taille ${sizeMatch.name})`;
+
+            if (isCloudMode) {
+                const totalStock = epiObj.sizes.reduce((sum, s) => sum + s.stock, 0);
+                const cloudNotes = `${epiObj.notes || ""}  __SIZES_JSON__${JSON.stringify(epiObj.sizes)}]`.trim();
+                await dbUpdate('epi_list', 'name', epiObj.name, { stock: totalStock, notes: cloudNotes });
+            }
+        }
+    }
+
+    // Remove from active attributions
+    attributions = attributions.filter(a => a.id !== attrId);
+
+    // Audit Log
+    const logDate = formatDateTime(new Date());
+    const newLog = {
+        date: logDate,
+        employeeName: attr.employeeName,
+        epi: attr.epi,
+        action: destination === "stock_ok" ? "Restitution (Retour en stock)" : "Restitution (Réformé)",
+        notes: `[Motif: ${reason}] ${stockMsg}. ${notesVal ? 'Obs: ' + notesVal : ''}`.trim()
+    };
+    history.push(newLog);
+
+    if (isCloudMode) {
+        await dbDelete('attributions', 'id', attrId);
+        await dbInsert('history', newLog);
+    }
+
+    saveLocalState();
+    document.getElementById("modal-restitution")?.classList.remove("active");
+    renderUI();
+    alert(`Restitution enregistrée avec succès !\n\nRésultat : ${stockMsg}`);
 });
 
 // Delete EPI from catalog
