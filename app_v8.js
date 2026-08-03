@@ -1,3 +1,18 @@
+// ── HELPER ROLE / POSTE SANITIZER ──────────────────────────────────────────
+function getCleanRole(emp) {
+    if (!emp) return '-';
+    let r = typeof emp === 'string' ? emp : (emp.role || emp.poste || emp.metier || '-');
+    if (typeof r === 'string' && r.trim().startsWith('{')) {
+        try {
+            const parsed = JSON.parse(r);
+            return parsed.poste || parsed.role || parsed.metier || parsed.nom || '-';
+        } catch (e) {
+            return r;
+        }
+    }
+    return r;
+}
+
 // ── CONFIGURATION CLOUD (SUPABASE — API REST directe, sans SDK externe) ────────
 const SUPABASE_URL = "https://wilukbpvjfdyxahasmmt.supabase.co";
 const SUPABASE_ANON_KEY = "sb_publishable_P9MiaaGJqJ2f6zAFvHwXZA_jYHlF830";
