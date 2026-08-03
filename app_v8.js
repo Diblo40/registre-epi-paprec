@@ -498,7 +498,13 @@ async function loadData() {
 
             // Only overwrite local data if cloud has actual records
             // (prevents cloud empty tables from wiping local data on first sync)
-            if (cloudEmp !== null && cloudEmp.length > 0) { employees = cloudEmp.filter(e => e && e.id && e.id !== "rh_global_state" && e.name && !e.name.startsWith("{")); changed = true; }
+            if (cloudEmp !== null && cloudEmp.length > 0) { 
+                employees = cloudEmp.filter(e => e && e.id && e.id !== "rh_global_state" && e.name && !e.name.startsWith("{")).map(e => ({
+                    ...e,
+                    role: getCleanRole(e)
+                })); 
+                changed = true; 
+            }
             else if (cloudEmp !== null && cloudEmp.length === 0 && employees.length > 0) {
                 // Push local employees to empty cloud DB
                 await dbInsert('employees', employees);
@@ -710,11 +716,13 @@ function renderEmployeesTable() {
             ? empAttributions.reduce((latest, current) => new Date(latest.date) > new Date(current.date) ? latest : current).date 
             : "Aucune dotation";
 
+        const cleanRole = getCleanRole(emp);
+
         const tr = document.createElement("tr");
         tr.innerHTML = `
             <td><strong>${emp.name}</strong></td>
-            <td>${emp.role}</td>
-            <td>${emp.entryDate}</td>
+            <td>${cleanRole}</td>
+            <td>${emp.entryDate || '-'}</td>
             <td><span class="badge badge-new">${empAttributions.length} EPI</span></td>
             <td>${lastAttribution}</td>
             <td class="text-right">
@@ -1927,7 +1935,7 @@ function renderEmployeeCostsTable() {
         const tr = document.createElement("tr");
         tr.innerHTML = `
             <td><strong>${item.emp.name}</strong></td>
-            <td class="text-secondary" style="font-size:0.85rem;">${item.emp.role}</td>
+            <td class="text-secondary" style="font-size:0.85rem;">${getCleanRole(item.emp)}</td>
             <td><span class="badge badge-new">${item.activeCount} EPI</span></td>
             <td><span class="badge badge-euro" style="font-size:0.9rem; font-weight:700;">${item.totalCost.toFixed(2)} €</span></td>
         `;
