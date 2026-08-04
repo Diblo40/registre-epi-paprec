@@ -563,6 +563,10 @@ async function loadData() {
                 changed = true; 
                 
                 // Reconstruct invoices and priceHistory from cloud history logs
+                // Clear previously reconstructed cloud invoices to avoid duplicates/stale data
+                invoices = invoices.filter(i => i.id && !i.id.toString().startsWith("fac_cloud_"));
+                priceHistory = priceHistory.filter(p => p.id && !p.id.toString().startsWith("ph_cloud_"));
+
                 cloudHist.forEach(h => {
                     if (h.action === "Achat / Appro" && h.notes && h.notes.includes("Facture:")) {
                         // Parse notes: Facture:FAC-XXX | Qté:10 | PU:42.50 | Size:M | ...
@@ -614,6 +618,8 @@ async function loadData() {
                 localStorage.setItem("paprec_employees", JSON.stringify(employees));
                 localStorage.setItem("paprec_attributions", JSON.stringify(attributions));
                 localStorage.setItem("paprec_history", JSON.stringify(history));
+                localStorage.setItem("paprec_epi_invoices", JSON.stringify(invoices));
+                localStorage.setItem("paprec_epi_price_history", JSON.stringify(priceHistory));
                 updateStats();
                 renderAll();
             }
@@ -2039,10 +2045,47 @@ function renderInvoicesTable() {
     });
 }
 
-window.deleteInvoice = function(id) {
-    if (confirm("Voulez-vous vraiment supprimer cette facture ?")) {
+window.deleteInvoice = async function(id) {
+    const inv = invoices.find(i => i.id === id);
+    if (!inv) return;
+
+    if (confirm(`Voulez-vous vraiment supprimer la facture N° ${inv.invoiceNumber} ?\n\nCela retirera également les ${inv.quantity} unité(s) de "${inv.epiName}" (Taille : ${inv.size}) du stock physique.`)) {
+        
+        // 1. Adjust Stock
+        const epiObj = epiList.find(e => e.name === inv.epiName);
+        if (epiObj && epiObj.sizes) {
+            const sizeObj = epiObj.sizes.find(s => s.name === inv.size);
+            if (sizeObj) {
+                sizeObj.stock = Math.max(0, sizeObj.stock - inv.quantity);
+            }
+        }
+
+        // 2. Filter local arrays
         invoices = invoices.filter(i => i.id !== id);
+        priceHistory = priceHistory.filter(p => p.invoiceNumber !== inv.invoiceNumber || p.epiName !== inv.epiName);
+
+        // 3. Sync to Supabase
+        if (isCloudMode) {
+            // Delete history entry if it was parsed from cloud
+            let logId = null;
+            if (id.toString().startsWith("fac_cloud_")) {
+                logId = parseInt(id.toString().replace("fac_cloud_", ""));
+            }
+            if (logId) {
+                await dbDelete('history', 'id', logId);
+            }
+            
+            // Update EPI stock on cloud
+            if (epiObj) {
+                const totalStock = epiObj.sizes ? epiObj.sizes.reduce((sum, s) => sum + s.stock, 0) : 0;
+                const cloudNotes = `${epiObj.notes || ""}  __SIZES_JSON__${JSON.stringify(epiObj.sizes)}`.trim();
+                await dbUpdate('epi_list', 'name', epiObj.name, { stock: totalStock, notes: cloudNotes });
+            }
+        }
+
+        // 4. Save and Render
         saveLocalState();
+        alert("Facture supprimée et stock mis à jour avec succès !");
     }
 };
 
