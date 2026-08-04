@@ -14,7 +14,7 @@
     
     <!-- Scripts avec 'defer' (chargement non-bloquant et ordonné) -->
     <script src="https://cdn.jsdelivr.net/npm/chart.js" defer></script>
-        <script src="app_v8.js?v=24.0" defer></script>
+        <script src="app_v8.js?v=25.0" defer></script>
 </head>
 <body>
 
@@ -34,23 +34,23 @@
             </div>
         </div>
         <nav class="nav-menu">
-            <a href="#" class="nav-item active" data-tab="dashboard">
+            <a href="#" class="nav-item active" data-tab="dashboard" id="btn-tab-dashboard">
                 <i class="fa-solid fa-chart-line"></i>
                 <span>Tableau de bord</span>
             </a>
-            <a href="#" class="nav-item" data-tab="personnel">
+            <a href="#" class="nav-item" data-tab="personnel" id="btn-tab-personnel">
                 <i class="fa-solid fa-users"></i>
                 <span>Personnel</span>
             </a>
-            <a href="#" class="nav-item" data-tab="attributions">
+            <a href="#" class="nav-item" data-tab="attributions" id="btn-tab-attributions">
                 <i class="fa-solid fa-handshake"></i>
                 <span>Attributions</span>
             </a>
-            <a href="#" class="nav-item" data-tab="equipements">
+            <a href="#" class="nav-item" data-tab="equipements" id="btn-tab-equipements">
                 <i class="fa-solid fa-screwdriver-wrench"></i>
                 <span>Équipements (EPI)</span>
             </a>
-            <a href="#" class="nav-item" data-tab="historique">
+            <a href="#" class="nav-item" data-tab="historique" id="btn-tab-historique">
                 <i class="fa-solid fa-clock-rotate-left"></i>
                 <span>Historique</span>
             </a>
@@ -410,33 +410,48 @@
                 <!-- Droite : Graphique d'Évolution des Prix -->
                 <div class="card card-active-assignments">
                     <div class="card-header flex-header">
-                        <h3><i class="fa-solid fa-chart-line text-primary"></i> Évolution du Prix par EPI</h3>
-                        <select id="select-price-trend-epi" class="form-control" style="width: 240px; padding: 4px 8px; font-size: 0.85rem; border-radius: 6px; background: #0f172a; color: white; border: 1px solid #334155;">
-                            <option value="">Sélectionner un EPI...</option>
-                        </select>
+                        <h3><i class="fa-solid fa-receipt text-primary"></i> Récapitulatif des Dépenses EPI</h3>
                     </div>
                     <div class="card-body">
-                        <div id="price-trend-summary-badge" style="margin-bottom: 12px; font-size: 0.9rem; font-weight: 600;">
-                            <!-- Populated by JS -->
-                        </div>
-                        <div style="height: 200px; position: relative;">
-                            <canvas id="chart-price-trend"></canvas>
-                        </div>
-                        <div style="margin-top: 15px; max-height: 140px; overflow-y: auto;">
-                            <table class="data-table" style="font-size: 0.83rem;">
+                        <div class="table-responsive" style="max-height: 300px; overflow-y: auto;">
+                            <table class="data-table" style="font-size: 0.85rem;">
                                 <thead>
                                     <tr>
-                                        <th>Date</th>
-                                        <th>N° Facture</th>
-                                        <th>Fournisseur</th>
-                                        <th>Prix Unitaire</th>
-                                        <th>Tendance</th>
+                                        <th>Équipement (EPI)</th>
+                                        <th>Qté Totale Achetée</th>
+                                        <th>Prix Unitaire Moyen (€)</th>
+                                        <th>Coût Total (€)</th>
+                                        <th>Dernière Facture</th>
                                     </tr>
                                 </thead>
-                                <tbody id="price-history-table-body">
-                                    <!-- Injected by JS -->
-                                </tbody>
+                                <tbody id="expense-summary-table-body"></tbody>
                             </table>
+                        </div>
+                        <div style="margin-top: 20px;">
+                            <div class="card-header flex-header" style="padding: 0 0 10px 0;">
+                                <h4 style="font-size: 0.95rem;"><i class="fa-solid fa-chart-line text-primary"></i> Évolution du Prix par EPI</h4>
+                                <select id="select-price-trend-epi" class="form-control" style="width: 220px; padding: 4px 8px; font-size: 0.82rem; border-radius: 6px; background: #0f172a; color: white; border: 1px solid #334155;" onchange="renderPriceTrendSection()">
+                                    <option value="">Sélectionner un EPI...</option>
+                                </select>
+                            </div>
+                            <div id="price-trend-summary-badge" style="margin-bottom: 8px; font-size: 0.85rem; font-weight: 600;"></div>
+                            <div style="height: 180px; position: relative;">
+                                <canvas id="chart-price-trend"></canvas>
+                            </div>
+                            <div style="margin-top: 10px; max-height: 120px; overflow-y: auto;">
+                                <table class="data-table" style="font-size: 0.8rem;">
+                                    <thead>
+                                        <tr>
+                                            <th>Date</th>
+                                            <th>N° Facture</th>
+                                            <th>Fournisseur</th>
+                                            <th>Prix Unitaire</th>
+                                            <th>Tendance</th>
+                                        </tr>
+                                    </thead>
+                                    <tbody id="price-history-table-body"></tbody>
+                                </table>
+                            </div>
                         </div>
                     </div>
                 </div>
@@ -583,6 +598,7 @@
             </form>
         </div>
     </div>
+</div>
 <!-- MODAL: Restitution Équipement / Retour en Stock -->
 <div class="modal-overlay" id="modal-restitution">
     <div class="modal-box" style="max-width: 520px;">

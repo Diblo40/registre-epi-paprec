@@ -502,7 +502,7 @@ async function loadData() {
                 // First run: populate DB with default catalog (single bulk insert)
                 const bulk = epiList.map(e => {
                     const tStock = e.sizes.reduce((sum, s) => sum + s.stock, 0);
-                    const cloudNotes = `${e.notes || ""}  __SIZES_JSON__${JSON.stringify(e.sizes)}]`.trim();
+                    const cloudNotes = `${e.notes || ""}  __SIZES_JSON__${JSON.stringify(e.sizes)}`.trim();
                     return {
                         name: e.name, stock: tStock,
                         min_stock: e.minStock, lifespan_months: e.lifespan, notes: cloudNotes
@@ -808,6 +808,9 @@ function renderAttributionsTable() {
                     <button class="btn-icon" onclick="deleteAttribution('${attr.id}')" title="Retirer de la dotation active">
                         <i class="fa-solid fa-square-minus"></i>
                     </button>
+                    <button class="btn-icon print-btn" onclick="printReceiptForEmployee('${attr.employeeId}')" title="Fiche de Décharge EPI">
+                        <i class="fa-solid fa-file-signature" style="color: #0284c7;"></i>
+                    </button>
                 </div>
             </td>
         `;
@@ -873,10 +876,10 @@ function renderEquipementsTable() {
             <td>${statusBadge}</td>
             <td class="text-right">
                 <div class="action-buttons">
-                    <button class="btn-icon replace-btn" onclick="openEditStockModal('${epi.name.replace(/'/g, "\'")}')" title="Modifier cet EPI">
+                    <button class="btn-icon replace-btn" onclick="openEditStockModal('${epi.name.replace(/'/g, "&#39;")}')" title="Modifier cet EPI">
                         <i class="fa-solid fa-pen-to-square"></i>
                     </button>
-                    <button class="btn-icon" onclick="deleteEpi('${epi.name.replace(/'/g, "\'")}')" title="Supprimer cet EPI du catalogue">
+                    <button class="btn-icon" onclick="deleteEpi('${epi.name.replace(/'/g, "&#39;")}')" title="Supprimer cet EPI du catalogue">
                         <i class="fa-solid fa-trash-can text-danger"></i>
                     </button>
                 </div>
@@ -1213,7 +1216,7 @@ document.getElementById("form-assign-epi").addEventListener("submit", async func
     if (isCloudMode) {
                     await dbInsert('attributions', newAttr);
             const totalStock = epiObj.sizes ? epiObj.sizes.reduce((sum, s) => sum + s.stock, 0) : 0;
-            const cloudNotes = `${epiObj.notes || ""}  __SIZES_JSON__${JSON.stringify(epiObj.sizes)}]`.trim();
+            const cloudNotes = `${epiObj.notes || ""}  __SIZES_JSON__${JSON.stringify(epiObj.sizes)}`.trim();
             await dbInsert('history', newLog);
             await dbUpdate('epi_list', 'name', epiName, { stock: totalStock, notes: cloudNotes });
 
@@ -1439,7 +1442,7 @@ document.getElementById("form-restitution")?.addEventListener("submit", async fu
 
             if (isCloudMode) {
                 const totalStock = epiObj.sizes.reduce((sum, s) => sum + s.stock, 0);
-                const cloudNotes = `${epiObj.notes || ""}  __SIZES_JSON__${JSON.stringify(epiObj.sizes)}]`.trim();
+                const cloudNotes = `${epiObj.notes || ""}  __SIZES_JSON__${JSON.stringify(epiObj.sizes)}`.trim();
                 await dbUpdate('epi_list', 'name', epiObj.name, { stock: totalStock, notes: cloudNotes });
             }
         }
@@ -1466,7 +1469,7 @@ document.getElementById("form-restitution")?.addEventListener("submit", async fu
 
     saveLocalState();
     document.getElementById("modal-restitution")?.classList.remove("active");
-    renderUI();
+    renderAll();
     alert(`Restitution enregistrée avec succès !\n\nRésultat : ${stockMsg}`);
 });
 
@@ -1575,7 +1578,7 @@ document.getElementById("form-edit-stock").addEventListener("submit", async func
     history.push(newLog);
 
     if (isCloudMode) {
-        const cloudNotes = `${notes || ""}  __SIZES_JSON__${JSON.stringify(sizes)}]`.trim();
+        const cloudNotes = `${notes || ""}  __SIZES_JSON__${JSON.stringify(sizes)}`.trim();
         await dbUpdate('epi_list', 'name', epiName, { name: newName, stock: newTotalStock, min_stock: min, lifespan_months: lifespan, notes: cloudNotes });
         await dbInsert('history', newLog);
     }
@@ -1604,14 +1607,14 @@ window.printReceiptForEmployee = function(employeeId) {
     const empAttributions = attributions.filter(a => a.employeeId === employeeId);
     
     document.getElementById("print-emp-name").innerText = emp.name;
-    document.getElementById("print-emp-role").innerText = emp.role;
+    document.getElementById("print-emp-role").innerText = getCleanRole(emp);
     document.getElementById("print-date").innerText = new Date().toLocaleDateString('fr-FR');
 
     const printTbody = document.getElementById("print-table-body");
     printTbody.innerHTML = "";
 
     if (empAttributions.length === 0) {
-        printTbody.innerHTML = `<tr><td colspan="6" style="text-align:center;">Aucun équipement actuellement attribué.</td></tr>`;
+        printTbody.innerHTML = `<tr><td colspan="7" style="text-align:center;">Aucun équipement actuellement attribué.</td></tr>`;
     } else {
         empAttributions.forEach(attr => {
             const tr = document.createElement("tr");
@@ -1621,6 +1624,7 @@ window.printReceiptForEmployee = function(employeeId) {
                 <td>${attr.date}</td>
                 <td>${attr.expirationDate || '-'}</td>
                 <td>${attr.state}</td>
+                <td>${getEpiUnitPrice(attr.epi).toFixed(2)} €</td>
                 <td>${attr.notes || '-'}</td>
             `;
             printTbody.appendChild(tr);
@@ -1863,7 +1867,7 @@ document.addEventListener("DOMContentLoaded", () => {
         history.push(newLog);
 
         if (isCloudMode) {
-            const cloudNotes = `${newEpiNotes || ""}  __SIZES_JSON__${JSON.stringify(sizes)}]`.trim();
+            const cloudNotes = `${newEpiNotes || ""}  __SIZES_JSON__${JSON.stringify(sizes)}`.trim();
             await dbInsert('epi_list', { name: newEpiName, stock: totalStock, min_stock: newEpiMin, lifespan_months: newEpiLifespan, notes: cloudNotes });
             await dbInsert('history', newLog);
         }
@@ -1918,6 +1922,7 @@ function renderFinancesTab() {
     // 5. Render Price Trend Section
     populatePriceTrendEpiSelect();
     renderPriceTrendSection();
+    renderExpenseSummaryTable();
 }
 
 function populateInvoiceSelects() {
@@ -2043,6 +2048,49 @@ function renderEmployeeCostsTable() {
             <td class="text-secondary" style="font-size:0.85rem;">${getCleanRole(item.emp)}</td>
             <td><span class="badge badge-new">${item.activeCount} EPI</span></td>
             <td><span class="badge badge-euro" style="font-size:0.9rem; font-weight:700;">${item.totalCost.toFixed(2)} €</span></td>
+        `;
+        tbody.appendChild(tr);
+    });
+}
+
+// Expense Summary Table (Récapitulatif des Dépenses EPI)
+function renderExpenseSummaryTable() {
+    const tbody = document.getElementById("expense-summary-table-body");
+    if (!tbody) return;
+    tbody.innerHTML = "";
+
+    // Group invoices by EPI name
+    const epiExpenses = {};
+    invoices.forEach(inv => {
+        if (!epiExpenses[inv.epiName]) {
+            epiExpenses[inv.epiName] = { totalQty: 0, totalCost: 0, prices: [], lastDate: '', lastInvoice: '' };
+        }
+        const entry = epiExpenses[inv.epiName];
+        entry.totalQty += inv.quantity;
+        entry.totalCost += inv.quantity * inv.unitPrice;
+        entry.prices.push(inv.unitPrice);
+        if (!entry.lastDate || inv.date > entry.lastDate) {
+            entry.lastDate = inv.date;
+            entry.lastInvoice = inv.invoiceNumber;
+        }
+    });
+
+    const sorted = Object.entries(epiExpenses).sort((a, b) => b[1].totalCost - a[1].totalCost);
+
+    if (sorted.length === 0) {
+        tbody.innerHTML = `<tr><td colspan="5" class="text-secondary" style="text-align:center;">Aucune facture enregistrée.</td></tr>`;
+        return;
+    }
+
+    sorted.forEach(([epiName, data]) => {
+        const avgPrice = data.prices.reduce((s, p) => s + p, 0) / data.prices.length;
+        const tr = document.createElement("tr");
+        tr.innerHTML = `
+            <td><strong>${epiName}</strong></td>
+            <td style="text-align:center;">${data.totalQty}</td>
+            <td style="text-align:center;">${avgPrice.toFixed(2)} €</td>
+            <td><span class="badge badge-euro" style="font-weight:700;">${data.totalCost.toFixed(2)} €</span></td>
+            <td style="font-size:0.82rem;">${data.lastInvoice} (${data.lastDate})</td>
         `;
         tbody.appendChild(tr);
     });
@@ -2298,6 +2346,19 @@ document.addEventListener("DOMContentLoaded", () => {
             history.push(newLog);
 
             saveLocalState();
+            if (isCloudMode) {
+                const totalStock = epiObj.sizes ? epiObj.sizes.reduce((sum, s) => sum + s.stock, 0) : 0;
+                const cloudNotes = `${epiObj.notes || ""}  __SIZES_JSON__${JSON.stringify(epiObj.sizes)}`.trim();
+                await dbUpdate('epi_list', 'name', epiName, { stock: totalStock, notes: cloudNotes, unitPrice: updateCatalogPrice ? unitPrice : undefined });
+                const cloudHistLog = {
+                    date: date,
+                    employeeName: `Fournisseur: ${supplier}`,
+                    epi: epiName,
+                    action: "Achat / Appro",
+                    notes: `Facture:${invoiceNumber} | Qté:${quantity} | PU:${unitPrice.toFixed(2)} | Size:${size} | Total:${(quantity * unitPrice).toFixed(2)} | ${notes}`
+                };
+                await dbInsert('history', cloudHistLog);
+            }
             this.reset();
             document.getElementById("inv-date").valueAsDate = new Date();
             alert(`Facture ${invoiceNumber} enregistrée avec succès ! Stock de "${epiName}" (+${quantity}) mis à jour.`);
@@ -2323,20 +2384,15 @@ function updateCloudStatus(status, text) {
 
 // Periodic Background Sync (every 10 seconds across all devices)
 function initRealtimeCloudSync() {
-    // Initial sync
-    initRealtimeCloudSync();
-
-    // Auto-poll every 10s
-    setInterval(() => {
-        if (!isSyncingInProcess) {
-            syncCloudWithLocal(true);
+    if (!isCloudMode) return;
+    // Periodic cloud sync every 60 seconds
+    setInterval(async () => {
+        try {
+            await loadData();
+        } catch(e) {
+            console.warn('Cloud sync error:', e.message);
         }
-    }, 10000);
-
-    // Sync when user re-focuses tab/window
-    window.addEventListener('focus', () => {
-        syncCloudWithLocal(true);
-    });
+    }, 60000);
 }
 
 
