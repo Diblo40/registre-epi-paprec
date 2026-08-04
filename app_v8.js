@@ -2379,17 +2379,21 @@ document.addEventListener("DOMContentLoaded", () => {
 
             saveLocalState();
             if (isCloudMode) {
-                const totalStock = epiObj.sizes ? epiObj.sizes.reduce((sum, s) => sum + s.stock, 0) : 0;
-                const cloudNotes = `${epiObj.notes || ""}  __SIZES_JSON__${JSON.stringify(epiObj.sizes)}`.trim();
-                await dbUpdate('epi_list', 'name', epiName, { stock: totalStock, notes: cloudNotes, unitPrice: updateCatalogPrice ? unitPrice : undefined });
-                const cloudHistLog = {
-                    date: date,
-                    employeeName: `Fournisseur: ${supplier}`,
-                    epi: epiName,
-                    action: "Achat / Appro",
-                    notes: `Facture:${invoiceNumber} | Qté:${quantity} | PU:${unitPrice.toFixed(2)} | Size:${size} | Total:${(quantity * unitPrice).toFixed(2)} | ${notes}`
-                };
-                await dbInsert('history', cloudHistLog);
+                try {
+                    const totalStock = epiObj.sizes ? epiObj.sizes.reduce((sum, s) => sum + s.stock, 0) : 0;
+                    const cloudNotes = `${epiObj.notes || ""}  __SIZES_JSON__${JSON.stringify(epiObj.sizes)}`.trim();
+                    await dbUpdate('epi_list', 'name', epiName, { stock: totalStock, notes: cloudNotes });
+                    const cloudHistLog = {
+                        date: date,
+                        employeeName: `Fournisseur: ${supplier}`,
+                        epi: epiName,
+                        action: "Achat / Appro",
+                        notes: `Facture:${invoiceNumber} | Qté:${quantity} | PU:${unitPrice.toFixed(2)} | Size:${size} | Total:${(quantity * unitPrice).toFixed(2)} | ${notes}`
+                    };
+                    await dbInsert('history', cloudHistLog);
+                } catch (err) {
+                    console.warn("Échec de synchronisation cloud de la facture :", err.message);
+                }
             }
             this.reset();
             document.getElementById("inv-date").valueAsDate = new Date();
