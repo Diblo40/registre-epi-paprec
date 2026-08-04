@@ -562,11 +562,7 @@ async function loadData() {
                 history = cloudHist; 
                 changed = true; 
                 
-                // Reconstruct invoices and priceHistory from cloud history logs
-                // Clear previously reconstructed cloud invoices to avoid duplicates/stale data
-                invoices = invoices.filter(i => i.id && !i.id.toString().startsWith("fac_cloud_"));
-                priceHistory = priceHistory.filter(p => p.id && !p.id.toString().startsWith("ph_cloud_"));
-
+                // Reconstruct invoices and priceHistory from cloud history logs (without wiping local data)
                 cloudHist.forEach(h => {
                     if (h.action === "Achat / Appro" && h.notes && h.notes.includes("Facture:")) {
                         // Parse notes: Facture:FAC-XXX | Qté:10 | PU:42.50 | Size:M | ...
@@ -582,9 +578,9 @@ async function loadData() {
                             const qteVal = matchQte ? parseInt(matchQte[1]) : 1;
                             const sizeVal = matchSize ? matchSize[1] : "Standard";
 
-                            if (!invoices.some(i => i.invoiceNumber === facNum && i.epiName === h.epi)) {
+                            if (!invoices.some(i => i.invoiceNumber === facNum && i.epiName === h.epi && i.size === sizeVal && i.quantity === qteVal)) {
                                 invoices.push({
-                                    id: `fac_cloud_${Math.random().toString(36).substr(2,6)}`,
+                                    id: `fac_cloud_${h.id || Math.random().toString(36).substr(2,6)}`,
                                     invoiceNumber: facNum,
                                     supplier: supplierName,
                                     date: h.date.split(" ")[0],
@@ -597,9 +593,9 @@ async function loadData() {
                                 });
                             }
 
-                            if (!priceHistory.some(p => p.invoiceNumber === facNum && p.epiName === h.epi)) {
+                            if (!priceHistory.some(p => p.invoiceNumber === facNum && p.epiName === h.epi && p.unitPrice === puVal)) {
                                 priceHistory.push({
-                                    id: `ph_cloud_${Math.random().toString(36).substr(2,6)}`,
+                                    id: `ph_cloud_${h.id || Math.random().toString(36).substr(2,6)}`,
                                     epiName: h.epi,
                                     date: h.date.split(" ")[0],
                                     unitPrice: puVal,
