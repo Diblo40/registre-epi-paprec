@@ -14,21 +14,18 @@
     
     <!-- Scripts avec 'defer' (chargement non-bloquant et ordonné) -->
     <script src="https://cdn.jsdelivr.net/npm/chart.js" defer></script>
-        <script src="app_v8.js?v=25.0" defer></script>
+        <script src="app_v8.js?v=26.0" defer></script>
 </head>
 <body>
 
 <div class="app-container">
     <!-- Sidebar Navigation -->
     <aside class="sidebar">
-        <div class="brand">
-            <div class="logo-circle">
-                <i class="fa-solid fa-shield-halved"></i>
-            </div>
-            <div class="brand-info">
-                <h2>PAPREC</h2>
-                <span>Registre EPI</span>
-                <div id="cloud-sync-status-badge" style="margin-top: 4px; font-size: 0.73rem; font-weight: 600;">
+        <div class="brand" style="padding: 15px 20px;">
+            <img src="assets/img/paprec_logo.png" alt="PAPREC" style="max-height: 55px; max-width: 100%; display: block; margin: 0 auto 5px auto;">
+            <div class="brand-info" style="text-align: center; margin-top: 5px; width: 100%;">
+                <span style="font-weight: 700; font-size: 0.85rem; color: #cbd5e1; text-transform: uppercase; letter-spacing: 0.05em; display: block; margin-top: 2px;">Registre EPI</span>
+                <div id="cloud-sync-status-badge" style="margin-top: 4px; font-size: 0.73rem; font-weight: 600; display: inline-block;">
                     <span style="color: #10b981;"><i class="fa-solid fa-cloud-check"></i> Cloud Synchro Actif</span>
                 </div>
             </div>
@@ -427,30 +424,23 @@
                                 <tbody id="expense-summary-table-body"></tbody>
                             </table>
                         </div>
-                        <div style="margin-top: 20px;">
+                        <div style="margin-top: 25px; border-top: 1px solid #334155; padding-top: 20px;">
                             <div class="card-header flex-header" style="padding: 0 0 10px 0;">
-                                <h4 style="font-size: 0.95rem;"><i class="fa-solid fa-chart-line text-primary"></i> Évolution du Prix par EPI</h4>
-                                <select id="select-price-trend-epi" class="form-control" style="width: 220px; padding: 4px 8px; font-size: 0.82rem; border-radius: 6px; background: #0f172a; color: white; border: 1px solid #334155;" onchange="renderPriceTrendSection()">
-                                    <option value="">Sélectionner un EPI...</option>
-                                </select>
+                                <h4 style="font-size: 0.95rem;"><i class="fa-solid fa-chart-bar text-primary"></i> Répartition Graphique des Dépenses</h4>
+                                <div style="display: flex; gap: 8px;">
+                                    <select id="expense-chart-supplier-filter" class="form-control" style="width: 150px; padding: 4px 8px; font-size: 0.82rem; border-radius: 6px; background: #0f172a; color: white; border: 1px solid #334155;" onchange="renderExpenseChart()">
+                                        <option value="all">Tous les Fournisseurs</option>
+                                    </select>
+                                    <select id="expense-chart-period-filter" class="form-control" style="width: 120px; padding: 4px 8px; font-size: 0.82rem; border-radius: 6px; background: #0f172a; color: white; border: 1px solid #334155;" onchange="renderExpenseChart()">
+                                        <option value="all">Toutes périodes</option>
+                                        <option value="30">30 derniers jours</option>
+                                        <option value="180">6 derniers mois</option>
+                                        <option value="365">12 derniers mois</option>
+                                    </select>
+                                </div>
                             </div>
-                            <div id="price-trend-summary-badge" style="margin-bottom: 8px; font-size: 0.85rem; font-weight: 600;"></div>
-                            <div style="height: 180px; position: relative;">
-                                <canvas id="chart-price-trend"></canvas>
-                            </div>
-                            <div style="margin-top: 10px; max-height: 120px; overflow-y: auto;">
-                                <table class="data-table" style="font-size: 0.8rem;">
-                                    <thead>
-                                        <tr>
-                                            <th>Date</th>
-                                            <th>N° Facture</th>
-                                            <th>Fournisseur</th>
-                                            <th>Prix Unitaire</th>
-                                            <th>Tendance</th>
-                                        </tr>
-                                    </thead>
-                                    <tbody id="price-history-table-body"></tbody>
-                                </table>
+                            <div style="height: 240px; position: relative;">
+                                <canvas id="chart-expenses-epi"></canvas>
                             </div>
                         </div>
                     </div>
@@ -745,8 +735,8 @@
 <!-- Zone d'impression (invisible en mode normal) -->
 <div class="print-container" id="print-sheet-layout">
     <div class="print-header">
-        <div class="print-logo">
-            <i class="fa-solid fa-shield-halved"></i>
+        <div class="print-logo" style="display: flex; align-items: center; gap: 15px;">
+            <img src="assets/img/paprec_logo.png" alt="PAPREC" style="max-height: 55px;">
             <div><h2>PAPREC GROUP</h2><span>Direction Santé et Sécurité au Travail</span></div>
         </div>
         <div class="print-title-box">

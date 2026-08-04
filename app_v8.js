@@ -90,7 +90,8 @@ const DEFAULT_EPI = [
     { name: "Combinaison jetable", sizes: [{name: "L", stock: 7}, {name: "XL", stock: 8}], minStock: 5, lifespan: null, notes: "", expirationDate: "", unitPrice: 7.20 },
     { name: "Filtre masque à cartouche (ABEK1P3)", sizes: [{name: "Standard", stock: 8}], minStock: 4, lifespan: 6, notes: "Réf. Filtre Combi ABEK1P3", expirationDate: "2026-11-30", unitPrice: 16.00 },
     { name: "Masque FFP2 (Würth CM2000V FFP3)", sizes: [{name: "Standard", stock: 0}], minStock: 10, lifespan: 36, notes: "Durée de vie 3 ans armoire", expirationDate: "", unitPrice: 2.80 },
-    { name: "Casque antibruit 3M Peltor Optime II (H520A)", sizes: [{name: "Standard", stock: 1}], minStock: 2, lifespan: 60, notes: "Réf. 3M Peltor Optime II", expirationDate: "2022-08-01", unitPrice: 32.00 }
+    { name: "Casque antibruit 3M Peltor Optime II (H520A)", sizes: [{name: "Standard", stock: 1}], minStock: 2, lifespan: 60, notes: "Réf. 3M Peltor Optime II", expirationDate: "2022-08-01", unitPrice: 32.00 },
+    { name: "Talkie Walkie", sizes: [{name: "unique", stock: 3}], minStock: 2, lifespan: 36, notes: "Talkie Walkie d'agence", expirationDate: "", unitPrice: 85.00 }
 ];
 
 // ─── LISTE DU PERSONNEL PAPREC (importée depuis LISTE PERSONNEL.xlsx) ──────────
@@ -365,6 +366,37 @@ let rawInvoices = null;
 try { rawInvoices = JSON.parse(localStorage.getItem("paprec_epi_invoices")); } catch(err) {}
 let invoices = (rawInvoices || DEFAULT_INVOICES).filter(i => i && i.invoiceNumber);
 
+// Auto-inject Talkie Walkie catalog item if not present in epiList
+if (!epiList.some(e => e.name === "Talkie Walkie")) {
+    epiList.push({
+        name: "Talkie Walkie",
+        sizes: [{name: "unique", stock: 3}],
+        minStock: 2,
+        lifespan: 36,
+        notes: "Talkie Walkie d'agence",
+        expirationDate: "",
+        unitPrice: 85.00
+    });
+    localStorage.setItem("paprec_epi_list", JSON.stringify(epiList));
+}
+
+// Auto-inject Talkie Walkie invoice if not present in invoices
+if (!invoices.some(i => i.epiName === "Talkie Walkie")) {
+    invoices.push({
+        id: "fac_2026_talkie",
+        invoiceNumber: "FAC-TW-2026-07",
+        supplier: "Appros Paprec",
+        date: "2026-07-31",
+        epiName: "Talkie Walkie",
+        size: "unique",
+        quantity: 4,
+        unitPrice: 85.00,
+        totalPrice: 340.00,
+        notes: "Achat initial Talkie-Walkies d'agence (Restauration automatique)"
+    });
+    localStorage.setItem("paprec_epi_invoices", JSON.stringify(invoices));
+}
+
 let rawPriceHistory = null;
 try { rawPriceHistory = JSON.parse(localStorage.getItem("paprec_epi_price_history")); } catch(err) {}
 let priceHistory = (rawPriceHistory || DEFAULT_PRICE_HISTORY).filter(p => p && p.epiName);
@@ -535,7 +567,7 @@ async function loadData() {
                     if (h.action === "Achat / Appro" && h.notes && h.notes.includes("Facture:")) {
                         // Parse notes: Facture:FAC-XXX | Qté:10 | PU:42.50 | Size:M | ...
                         const matchFac = h.notes.match(/Facture:([^\s\|]+)/);
-                        const matchQte = h.notes.match(/Qté:(\d+)/);
+                        const matchQte = h.notes.match(/Qt[ée]?:(\d+)/) || h.notes.match(/Qt:(\d+)/) || h.notes.match(/Qté:(\d+)/);
                         const matchPU = h.notes.match(/PU:([\d\.]+)/);
                         const matchSize = h.notes.match(/Size:([^\s\|]+)/);
                         const supplierName = h.employeeName ? h.employeeName.replace("Fournisseur:", "").trim() : "Paprec Appros";
@@ -1889,7 +1921,7 @@ document.addEventListener("DOMContentLoaded", () => {
 
 
 // ── FINANCES TAB RENDERING & LOGIC ───────────────────────────────────────────
-let priceTrendChart = null;
+let expensesEpiChart = null;
 
 function renderFinancesTab() {
     // 1. KPI Cards
@@ -1919,9 +1951,9 @@ function renderFinancesTab() {
     // 4. Render Employee Costs Table
     renderEmployeeCostsTable();
 
-    // 5. Render Price Trend Section
-    populatePriceTrendEpiSelect();
-    renderPriceTrendSection();
+    // 5. Render Expenses Section & Filters
+    populateExpenseFilters();
+    renderExpenseChart();
     renderExpenseSummaryTable();
 }
 
@@ -2096,168 +2128,125 @@ function renderExpenseSummaryTable() {
     });
 }
 
-function populatePriceTrendEpiSelect() {
-    const select = document.getElementById("select-price-trend-epi");
-    if (!select) return;
-    const currentVal = select.value;
-    select.innerHTML = `<option value="">Sélectionner un EPI...</option>`;
+function populateExpenseFilters() {
+    const supplierFilter = document.getElementById("expense-chart-supplier-filter");
+    if (!supplierFilter) return;
+
+    const currentVal = supplierFilter.value;
     
-    epiList.forEach(e => {
-        const opt = document.createElement("option");
-        opt.value = e.name;
-        opt.innerText = e.name;
-        if (e.name === currentVal) opt.selected = true;
-        select.appendChild(opt);
-    });
-
-    // If no value selected, pick the first EPI from catalog
-    if (!select.value && epiList.length > 0) {
-        select.value = epiList[0].name;
-    }
-}
-
-function renderPriceTrendSection() {
-    const select = document.getElementById("select-price-trend-epi");
-    const selectedEpi = select ? select.value : "";
-    const badgeEl = document.getElementById("price-trend-summary-badge");
-    const tbody = document.getElementById("price-history-table-body");
-
-    if (!selectedEpi) {
-        if (badgeEl) badgeEl.innerHTML = `<span class="text-secondary">Veuillez sélectionner un EPI pour voir son évolution tarifaire.</span>`;
-        if (tbody) tbody.innerHTML = `<tr><td colspan="5" class="text-secondary" style="text-align:center;">Aucune donnée.</td></tr>`;
-        return;
-    }
-
-    // Get historical price points for this EPI from priceHistory and invoices
-    let points = priceHistory.filter(p => p.epiName === selectedEpi);
-    
-    // Also include any invoice record for this EPI
+    // Get unique suppliers from invoices
+    const suppliers = new Set();
     invoices.forEach(inv => {
-        if (inv.epiName === selectedEpi && !points.some(p => p.invoiceNumber === inv.invoiceNumber)) {
-            points.push({
-                id: inv.id,
-                epiName: inv.epiName,
-                date: inv.date,
-                unitPrice: inv.unitPrice,
-                supplier: inv.supplier,
-                invoiceNumber: inv.invoiceNumber
-            });
-        }
+        if (inv.supplier) suppliers.add(inv.supplier.trim());
     });
 
-    // Sort by date ascending for chart
-    points.sort((a, b) => new Date(a.date) - new Date(b.date));
-
-    // If no points, fallback to current price
-    if (points.length === 0) {
-        const currentPrice = getEpiUnitPrice(selectedEpi);
-        points = [{
-            date: new Date().toISOString().split('T')[0],
-            unitPrice: currentPrice,
-            supplier: "Prix actuel",
-            invoiceNumber: "Réf. Tarif"
-        }];
-    }
-
-    // Calculate trend %
-    const firstPrice = points[0].unitPrice;
-    const lastPrice = points[points.length - 1].unitPrice;
-    let trendBadge = "";
-    if (points.length > 1 && firstPrice > 0) {
-        const pct = ((lastPrice - firstPrice) / firstPrice) * 100;
-        if (pct > 0) {
-            trendBadge = `<span class="trend-up"><i class="fa-solid fa-arrow-trend-up"></i> +${pct.toFixed(1)}% (${firstPrice.toFixed(2)} € → ${lastPrice.toFixed(2)} €)</span>`;
-        } else if (pct < 0) {
-            trendBadge = `<span class="trend-down"><i class="fa-solid fa-arrow-trend-down"></i> ${pct.toFixed(1)}% (${firstPrice.toFixed(2)} € → ${lastPrice.toFixed(2)} €)</span>`;
-        } else {
-            trendBadge = `<span class="trend-flat"><i class="fa-solid fa-minus"></i> Prix stable (${lastPrice.toFixed(2)} €)</span>`;
-        }
-    } else {
-        trendBadge = `<span class="trend-flat"><i class="fa-solid fa-tag"></i> Tarif actuel : ${lastPrice.toFixed(2)} € HT</span>`;
-    }
-
-    if (badgeEl) badgeEl.innerHTML = `<strong>Tendances Tarifaires pour ${selectedEpi} :</strong> ${trendBadge}`;
-
-    // Render Table
-    if (tbody) {
-        tbody.innerHTML = "";
-        // Display descending order in table
-        const tablePoints = [...points].reverse();
-        tablePoints.forEach((pt, idx) => {
-            const tr = document.createElement("tr");
-            let iconTrend = `<span class="trend-flat">➖</span>`;
-            if (idx < tablePoints.length - 1) {
-                const prevPrice = tablePoints[idx + 1].unitPrice;
-                if (pt.unitPrice > prevPrice) iconTrend = `<span class="trend-up">📈 +${(((pt.unitPrice - prevPrice)/prevPrice)*100).toFixed(1)}%</span>`;
-                else if (pt.unitPrice < prevPrice) iconTrend = `<span class="trend-down">📉 ${(((pt.unitPrice - prevPrice)/prevPrice)*100).toFixed(1)}%</span>`;
-            }
-            tr.innerHTML = `
-                <td>${pt.date}</td>
-                <td><strong>${pt.invoiceNumber || '-'}</strong></td>
-                <td>${pt.supplier || '-'}</td>
-                <td><strong>${pt.unitPrice.toFixed(2)} €</strong></td>
-                <td>${iconTrend}</td>
-            `;
-            tbody.appendChild(tr);
-        });
-    }
-
-    // Render Chart.js
-    renderPriceTrendChart(selectedEpi, points);
+    supplierFilter.innerHTML = '<option value="all">Tous les Fournisseurs</option>';
+    Array.from(suppliers).sort().forEach(sup => {
+        const opt = document.createElement("option");
+        opt.value = sup;
+        opt.innerText = sup;
+        if (sup === currentVal) opt.selected = true;
+        supplierFilter.appendChild(opt);
+    });
 }
 
-function renderPriceTrendChart(epiName, points) {
-    const canvas = document.getElementById("chart-price-trend");
+function renderExpenseChart() {
+    const canvas = document.getElementById("chart-expenses-epi");
     if (!canvas) return;
 
     if (typeof Chart === 'undefined') return;
 
-    const labels = points.map(p => p.date);
-    const dataPrices = points.map(p => p.unitPrice);
+    const supplierFilter = document.getElementById("expense-chart-supplier-filter");
+    const periodFilter = document.getElementById("expense-chart-period-filter");
+    
+    const selectedSupplier = supplierFilter ? supplierFilter.value : "all";
+    const selectedPeriod = periodFilter ? periodFilter.value : "all";
+
+    const today = new Date();
+    
+    // Group expenses by EPI
+    const expenses = {};
+    invoices.forEach(inv => {
+        // Supplier filter
+        if (selectedSupplier !== "all" && inv.supplier.trim() !== selectedSupplier.trim()) return;
+
+        // Period filter
+        if (selectedPeriod !== "all") {
+            const limitDays = parseInt(selectedPeriod);
+            const invDate = new Date(inv.date);
+            const diffTime = today - invDate;
+            const diffDays = Math.ceil(diffTime / (1000 * 60 * 60 * 24));
+            if (diffDays > limitDays || diffDays < 0) return;
+        }
+
+        const totalCost = inv.totalPrice || (inv.quantity * inv.unitPrice);
+        if (!expenses[inv.epiName]) {
+            expenses[inv.epiName] = 0;
+        }
+        expenses[inv.epiName] += totalCost;
+    });
+
+    // Sort by expense descending
+    const sortedExpenses = Object.entries(expenses)
+        .sort((a, b) => b[1] - a[1])
+        .slice(0, 10); // Top 10 EPIs to prevent clutter
+
+    const labels = sortedExpenses.map(e => e[0]);
+    const dataValues = sortedExpenses.map(e => e[1]);
 
     const chartData = {
         labels: labels,
         datasets: [{
-            label: `Prix unitaire (€ HT) - ${epiName}`,
-            data: dataPrices,
-            borderColor: '#10b981',
-            backgroundColor: 'rgba(16, 185, 129, 0.15)',
-            borderWidth: 3,
-            fill: true,
-            tension: 0.3,
-            pointBackgroundColor: '#0284c7',
-            pointRadius: 5
+            label: "Dépenses (€ HT)",
+            data: dataValues,
+            backgroundColor: [
+                'rgba(16, 185, 129, 0.85)', // Emerald
+                'rgba(2, 132, 199, 0.85)',  // Sky
+                'rgba(245, 158, 11, 0.85)', // Amber
+                'rgba(239, 68, 68, 0.85)',   // Rose
+                'rgba(139, 92, 246, 0.85)',  // Violet
+                'rgba(236, 72, 153, 0.85)',  // Pink
+                'rgba(20, 184, 166, 0.85)',  // Teal
+                'rgba(249, 115, 22, 0.85)',  // Orange
+                'rgba(100, 116, 139, 0.85)'  // Slate
+            ],
+            borderRadius: 6,
+            borderWidth: 0
         }]
     };
 
-    if (priceTrendChart) {
-        priceTrendChart.data = chartData;
-        priceTrendChart.update();
+    if (expensesEpiChart) {
+        expensesEpiChart.data = chartData;
+        expensesEpiChart.update();
     } else {
         const ctx = canvas.getContext('2d');
-        priceTrendChart = new Chart(ctx, {
-            type: 'line',
+        expensesEpiChart = new Chart(ctx, {
+            type: 'bar',
             data: chartData,
             options: {
+                indexAxis: 'y', // Beautiful horizontal bars
                 responsive: true,
                 maintainAspectRatio: false,
                 plugins: {
                     legend: {
                         display: false
+                    },
+                    tooltip: {
+                        callbacks: {
+                            label: function(context) {
+                                return ` Dépense: ${context.parsed.x.toFixed(2)} € HT`;
+                            }
+                        }
                     }
                 },
                 scales: {
                     x: {
-                        ticks: { color: '#94a3b8', font: { family: 'Plus Jakarta Sans', size: 11 } },
+                        ticks: { color: '#94a3b8', font: { family: 'Plus Jakarta Sans', size: 10 } },
                         grid: { color: 'rgba(255, 255, 255, 0.05)' }
                     },
                     y: {
-                        ticks: { 
-                            color: '#94a3b8', 
-                            font: { family: 'Plus Jakarta Sans', size: 11 },
-                            callback: function(val) { return val + ' €'; }
-                        },
-                        grid: { color: 'rgba(255, 255, 255, 0.05)' }
+                        ticks: { color: '#cbd5e1', font: { family: 'Plus Jakarta Sans', size: 10, weight: 'bold' } },
+                        grid: { display: false }
                     }
                 }
             }
