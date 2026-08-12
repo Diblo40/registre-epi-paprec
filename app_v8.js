@@ -779,6 +779,9 @@ function renderEmployeesTable() {
                     <button class="btn-icon print-btn" onclick="printReceiptForEmployee('${emp.id}')" title="Générer Fiche de Décharge">
                         <i class="fa-solid fa-file-signature"></i>
                     </button>
+                    <button class="btn-icon replace-btn" onclick="openEditEmployeeModal('${emp.id}')" title="Modifier Collaborateur">
+                        <i class="fa-solid fa-pen-to-square"></i>
+                    </button>
                     <button class="btn-icon" onclick="deleteEmployee('${emp.id}')" title="Supprimer Collaborateur">
                         <i class="fa-solid fa-trash-can text-danger"></i>
                     </button>
@@ -878,6 +881,7 @@ function renderEquipementsTable() {
 
         if (viewFilter === "available" && totalStock <= 0) return;
         if (viewFilter === "in_service" && activeCount <= 0) return;
+        if (viewFilter === "needs_restock" && totalStock > epi.minStock) return;
 
         // Check stock warning status
         let statusBadge = `<span class="badge badge-new">OK</span>`;
@@ -940,7 +944,7 @@ function renderHistoryTable() {
     filtered.sort((a, b) => new Date(b.date) - new Date(a.date));
 
     if (filtered.length === 0) {
-        tbody.innerHTML = `<tr><td colspan="5" class="text-secondary" style="text-align:center;">Journal d'historique vide.</td></tr>`;
+        tbody.innerHTML = `<tr><td colspan="6" class="text-secondary" style="text-align:center;">Journal d'historique vide.</td></tr>`;
         return;
     }
 
@@ -958,9 +962,42 @@ function renderHistoryTable() {
             <td><span class="badge ${actionBadgeClass}">${h.action}</span></td>
             <td>${h.notes || '-'}</td>
         `;
+
+        const tdActions = document.createElement("td");
+        tdActions.className = "text-right";
+        const btnDelete = document.createElement("button");
+        btnDelete.className = "btn-icon";
+        btnDelete.title = "Supprimer cet évènement de l'historique";
+        btnDelete.innerHTML = `<i class="fa-solid fa-trash-can text-danger"></i>`;
+        btnDelete.addEventListener("click", () => deleteHistoryItem(h));
+        tdActions.appendChild(btnDelete);
+        tr.appendChild(tdActions);
+
         tbody.appendChild(tr);
     });
 }
+
+// Delete a single history entry (local + best-effort cloud deletion by field match)
+window.deleteHistoryItem = async function(item) {
+    if (!confirm("Voulez-vous vraiment supprimer cet évènement de l'historique ?")) return;
+
+    const idx = history.indexOf(item);
+    if (idx === -1) return;
+    history.splice(idx, 1);
+
+    if (isCloudMode) {
+        try {
+            const params = new URLSearchParams();
+            params.set('date', 'eq.' + item.date);
+            params.set('employeeName', 'eq.' + item.employeeName);
+            params.set('epi', 'eq.' + item.epi);
+            params.set('action', 'eq.' + item.action);
+            await fetch(DB_BASE + 'history?' + params.toString(), { method: 'DELETE', headers: DB_HEADERS });
+        } catch(e) { console.warn("deleteHistoryItem cloud", e.message); }
+    }
+
+    saveLocalState();
+};
 
 // 5. Employee Select Dropdowns
 function renderEmployeeSelects() {
@@ -1139,14 +1176,71 @@ document.addEventListener("DOMContentLoaded", () => {
 
 // BUSINESS LOGIC ACTIONS
 
-// Add new Employee
+// Open Edit Employee modal (pre-fills the Add Employee modal in edit mode)
+window.openEditEmployeeModal = function(id) {
+    const emp = employees.find(e => e.id === id);
+    if (!emp) return;
+
+    document.getElementById("emp-edit-id").value = emp.id;
+    document.getElementById("emp-name").value = emp.name;
+    document.getElementById("emp-role").value = getCleanRole(emp);
+    document.getElementById("emp-date-entry").value = emp.entryDate || "";
+
+    const title = document.getElementById("modal-employee-title");
+    if (title) title.innerText = "Modifier le Collaborateur";
+    const submitBtn = document.getElementById("btn-submit-employee");
+    if (submitBtn) submitBtn.innerText = "Enregistrer les modifications";
+
+    modalAddEmployee.classList.add("active");
+};
+
+// Add or Update Employee
 document.getElementById("form-add-employee").addEventListener("submit", async function(e) {
     e.preventDefault();
+    const editId = document.getElementById("emp-edit-id").value;
     const name = document.getElementById("emp-name").value.trim();
     const role = document.getElementById("emp-role").value.trim();
     const entryDate = document.getElementById("emp-date-entry").value;
 
     if (!name || !role || !entryDate) return;
+
+    if (editId) {
+        // EDIT MODE: update existing employee in place
+        const emp = employees.find(e => e.id === editId);
+        if (!emp) return;
+
+        const oldName = emp.name;
+        emp.name = name;
+        emp.role = role;
+        emp.entryDate = entryDate;
+
+        // Keep employeeName references consistent across attributions & history
+        if (oldName !== name) {
+            attributions.forEach(a => { if (a.employeeId === editId) a.employeeName = name; });
+            history.forEach(h => { if (h.employeeName === oldName) h.employeeName = name; });
+        }
+
+        const logDate = formatDateTime(new Date());
+        const newLog = {
+            date: logDate,
+            employeeName: name,
+            epi: "-",
+            action: "Attribution",
+            notes: `Modification de la fiche collaborateur (${role})`
+        };
+        history.push(newLog);
+
+        if (isCloudMode) {
+            await dbUpdate('employees', 'id', editId, { name, role, entryDate });
+            await dbInsert('history', newLog);
+        }
+
+        saveLocalState();
+        this.reset();
+        document.getElementById("emp-edit-id").value = "";
+        modalAddEmployee.classList.remove("active");
+        return;
+    }
 
     const newEmp = {
         id: generateId("emp"),
@@ -1156,7 +1250,7 @@ document.getElementById("form-add-employee").addEventListener("submit", async fu
     };
 
     employees.push(newEmp);
-    
+
     const logDate = formatDateTime(new Date());
     const newLog = {
         date: logDate,
@@ -1716,6 +1810,13 @@ function exportToExcel() {
     const histRows = [["Date", "Collaborateur", "EPI", "Action", "Détails"]];
     history.forEach(h => histRows.push([h.date, h.employeeName, h.epi, h.action, h.notes || '']));
 
+    // Finances & Factures
+    const invRows = [["Date", "N° Facture", "Fournisseur", "Équipement", "Taille", "Quantité", "Prix Unitaire (€)", "Prix Total (€)", "Notes"]];
+    invoices.forEach(inv => invRows.push([
+        inv.date, inv.invoiceNumber, inv.supplier, inv.epiName, inv.size || '', inv.quantity,
+        inv.unitPrice, (inv.totalPrice || (inv.quantity * inv.unitPrice)), inv.notes || ''
+    ]));
+
     const xml = `<?xml version="1.0" encoding="UTF-8"?>
 <?mso-application progid="Excel.Sheet"?>
 <Workbook xmlns="urn:schemas-microsoft-com:office:spreadsheet"
@@ -1727,6 +1828,7 @@ function exportToExcel() {
  ${makeXmlSheet('Catalogue EPI', epiRows)}
  ${makeXmlSheet('Dotations', attrRows)}
  ${makeXmlSheet('Historique', histRows)}
+ ${makeXmlSheet('Finances & Factures', invRows)}
 </Workbook>`;
 
     const blob = new Blob([xml], { type: 'application/vnd.ms-excel;charset=UTF-8' });
@@ -1802,16 +1904,27 @@ document.addEventListener("DOMContentLoaded", () => {
     if (empDateInput) empDateInput.valueAsDate = new Date();
 
     // Modal Add Employee triggers
+    function resetEmployeeModalToAddMode() {
+        document.getElementById("form-add-employee").reset();
+        document.getElementById("emp-edit-id").value = "";
+        const title = document.getElementById("modal-employee-title");
+        if (title) title.innerText = "Ajouter un Collaborateur";
+        const submitBtn = document.getElementById("btn-submit-employee");
+        if (submitBtn) submitBtn.innerText = "Enregistrer";
+    }
     document.getElementById("btn-add-employee-trigger").addEventListener("click", () => {
+        resetEmployeeModalToAddMode();
         const empDate = document.getElementById("emp-date-entry");
         if (empDate) empDate.valueAsDate = new Date();
         modalAddEmployee.classList.add("active");
     });
     document.getElementById("btn-close-modal-add").addEventListener("click", () => {
         modalAddEmployee.classList.remove("active");
+        resetEmployeeModalToAddMode();
     });
     document.getElementById("btn-cancel-add").addEventListener("click", () => {
         modalAddEmployee.classList.remove("active");
+        resetEmployeeModalToAddMode();
     });
 
     // Modal Incident triggers
@@ -1925,14 +2038,55 @@ document.addEventListener("DOMContentLoaded", () => {
 // ── FINANCES TAB RENDERING & LOGIC ───────────────────────────────────────────
 let expensesEpiChart = null;
 
-function renderFinancesTab() {
-    // 1. KPI Cards
-    const totalBudget = invoices.reduce((sum, inv) => sum + (inv.totalPrice || (inv.quantity * inv.unitPrice)), 0);
-    const totalAttributed = attributions.reduce((sum, attr) => {
+// Read the current "Répartition Graphique des Dépenses" filters (supplier + période)
+function getCurrentExpenseFilters() {
+    const supplierFilter = document.getElementById("expense-chart-supplier-filter");
+    const periodFilter = document.getElementById("expense-chart-period-filter");
+    return {
+        supplier: supplierFilter ? supplierFilter.value : "all",
+        period: periodFilter ? periodFilter.value : "all"
+    };
+}
+
+function invoiceMatchesExpenseFilters(inv, filters) {
+    if (filters.supplier !== "all" && inv.supplier.trim() !== filters.supplier.trim()) return false;
+    if (filters.period !== "all") {
+        const limitDays = parseInt(filters.period);
+        const diffDays = Math.ceil((new Date() - new Date(inv.date)) / (1000 * 60 * 60 * 24));
+        if (diffDays > limitDays || diffDays < 0) return false;
+    }
+    return true;
+}
+
+// Recompute & render the 4 top KPI cards, scoped to the Fournisseur/Période filters
+// of the "Répartition Graphique des Dépenses" section
+function computeFinanceKPIs() {
+    const filters = getCurrentExpenseFilters();
+    const isFiltered = filters.supplier !== "all" || filters.period !== "all";
+
+    const scopedInvoices = isFiltered ? invoices.filter(inv => invoiceMatchesExpenseFilters(inv, filters)) : invoices;
+
+    let scopedAttributions = attributions;
+    if (isFiltered) {
+        const scopedEpiNames = new Set(scopedInvoices.map(i => i.epiName));
+        scopedAttributions = attributions.filter(a => {
+            if (!scopedEpiNames.has(a.epi)) return false;
+            if (filters.period !== "all") {
+                const limitDays = parseInt(filters.period);
+                const diffDays = Math.ceil((new Date() - new Date(a.date)) / (1000 * 60 * 60 * 24));
+                if (diffDays > limitDays || diffDays < 0) return false;
+            }
+            return true;
+        });
+    }
+
+    const totalBudget = scopedInvoices.reduce((sum, inv) => sum + (inv.totalPrice || (inv.quantity * inv.unitPrice)), 0);
+    const totalAttributed = scopedAttributions.reduce((sum, attr) => {
         const p = (typeof attr.unitPrice === 'number' && attr.unitPrice > 0) ? attr.unitPrice : getEpiUnitPrice(attr.epi);
         return sum + p;
     }, 0);
-    const avgCost = employees.length > 0 ? (totalAttributed / employees.length) : 0;
+    const empDivisor = isFiltered ? new Set(scopedAttributions.map(a => a.employeeId)).size : employees.length;
+    const avgCost = empDivisor > 0 ? (totalAttributed / empDivisor) : 0;
 
     const elBudget = document.getElementById("stat-budget-total");
     const elAttributed = document.getElementById("stat-attributed-cost");
@@ -1942,7 +2096,13 @@ function renderFinancesTab() {
     if (elBudget) elBudget.innerText = `${totalBudget.toFixed(2)} €`;
     if (elAttributed) elAttributed.innerText = `${totalAttributed.toFixed(2)} €`;
     if (elAvg) elAvg.innerText = `${avgCost.toFixed(2)} €`;
-    if (elCount) elCount.innerText = invoices.length;
+    if (elCount) elCount.innerText = scopedInvoices.length;
+}
+window.computeFinanceKPIs = computeFinanceKPIs;
+
+function renderFinancesTab() {
+    // 1. KPI Cards (scoped to the current Fournisseur/Période filters, or global)
+    computeFinanceKPIs();
 
     // 2. Populate invoice EPI & size selects
     populateInvoiceSelects();
@@ -1959,7 +2119,20 @@ function renderFinancesTab() {
     renderExpenseSummaryTable();
 }
 
+function populateSupplierDatalist() {
+    const datalist = document.getElementById("inv-supplier-list");
+    if (!datalist) return;
+    const suppliers = [...new Set(invoices.map(i => i.supplier).filter(Boolean))].sort((a, b) => a.localeCompare(b));
+    datalist.innerHTML = "";
+    suppliers.forEach(s => {
+        const opt = document.createElement("option");
+        opt.value = s;
+        datalist.appendChild(opt);
+    });
+}
+
 function populateInvoiceSelects() {
+    populateSupplierDatalist();
     const selectEpi = document.getElementById("inv-epi");
     const datalist = document.getElementById("inv-size-list");
     if (!selectEpi) return;
@@ -2301,21 +2474,55 @@ document.addEventListener("DOMContentLoaded", () => {
         const dateInput = document.getElementById("inv-date");
         if (dateInput) dateInput.valueAsDate = new Date();
 
+        // Live convenience sync: auto-fill total price from qty x unit price (and vice-versa)
+        const qtyInput = document.getElementById("inv-qty");
+        const unitPriceInput = document.getElementById("inv-unit-price");
+        const totalPriceInput = document.getElementById("inv-total-price");
+        if (qtyInput && unitPriceInput && totalPriceInput) {
+            const recalcTotal = () => {
+                const qty = parseInt(qtyInput.value) || 0;
+                const unit = parseFloat(unitPriceInput.value) || 0;
+                if (qty > 0 && unit > 0) totalPriceInput.value = (qty * unit).toFixed(2);
+            };
+            const recalcUnit = () => {
+                const qty = parseInt(qtyInput.value) || 0;
+                const total = parseFloat(totalPriceInput.value) || 0;
+                if (qty > 0 && total > 0) unitPriceInput.value = (total / qty).toFixed(2);
+            };
+            unitPriceInput.addEventListener("input", recalcTotal);
+            qtyInput.addEventListener("input", () => { if (unitPriceInput.value) recalcTotal(); else recalcUnit(); });
+            totalPriceInput.addEventListener("input", recalcUnit);
+        }
+
         formInvoice.addEventListener("submit", async function(e) {
             e.preventDefault();
-            const invoiceNumber = document.getElementById("inv-number").value.trim();
+            let invoiceNumber = document.getElementById("inv-number").value.trim();
             const supplier = document.getElementById("inv-supplier").value.trim();
             const date = document.getElementById("inv-date").value;
             const epiName = document.getElementById("inv-epi").value;
             const size = document.getElementById("inv-size").value;
             const quantity = parseInt(document.getElementById("inv-qty").value) || 0;
-            const unitPrice = parseFloat(document.getElementById("inv-unit-price").value) || 0;
+            const unitPriceInput = parseFloat(document.getElementById("inv-unit-price").value) || 0;
+            const totalPriceInput = parseFloat(document.getElementById("inv-total-price").value) || 0;
             const updateCatalogPrice = document.getElementById("inv-update-catalog-price").checked;
             const notes = document.getElementById("inv-notes").value.trim();
 
-            if (!invoiceNumber || !supplier || !date || !epiName || !size || quantity <= 0 || unitPrice <= 0) {
-                alert("Veuillez remplir correctement tous les champs obligatoires (*).");
+            if (!supplier || !date || !epiName || !size || quantity <= 0 || (unitPriceInput <= 0 && totalPriceInput <= 0)) {
+                alert("Veuillez remplir correctement tous les champs obligatoires (*), et indiquer au moins un prix unitaire ou un prix total.");
                 return;
+            }
+
+            let unitPrice, totalPrice;
+            if (totalPriceInput > 0) {
+                totalPrice = totalPriceInput;
+                unitPrice = unitPriceInput > 0 ? unitPriceInput : (totalPriceInput / quantity);
+            } else {
+                unitPrice = unitPriceInput;
+                totalPrice = quantity * unitPrice;
+            }
+
+            if (!invoiceNumber) {
+                invoiceNumber = `AUTO-${new Date().toISOString().slice(0,10)}-${Math.random().toString(36).substr(2,4).toUpperCase()}`;
             }
 
             const epiObj = epiList.find(e => e.name === epiName);
@@ -2337,7 +2544,6 @@ document.addEventListener("DOMContentLoaded", () => {
                 epiObj.unitPrice = unitPrice;
             }
 
-            const totalPrice = quantity * unitPrice;
             const newInvoice = {
                 id: generateId("fac"),
                 invoiceNumber,
