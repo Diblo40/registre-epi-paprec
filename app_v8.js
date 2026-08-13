@@ -493,7 +493,7 @@ async function loadData() {
         try {
             const [cloudEpi, cloudEmp, cloudAttr, cloudHist] = await Promise.all([
                 dbGet('epi_list'),
-                dbGet('employees'),
+                dbGet('epi_employees'),
                 dbGet('attributions'),
                 dbGet('history')
             ]);
@@ -554,7 +554,7 @@ async function loadData() {
             }
             else if (cloudEmp !== null && cloudEmp.length === 0 && employees.length > 0) {
                 // Push local employees to empty cloud DB
-                await dbInsert('employees', employees);
+                await dbInsert('epi_employees', employees);
             }
             if (cloudAttr !== null) { attributions = cloudAttr; changed = true; }
             
@@ -1231,7 +1231,7 @@ document.getElementById("form-add-employee").addEventListener("submit", async fu
         history.push(newLog);
 
         if (isCloudMode) {
-            await dbUpdate('employees', 'id', editId, { name, role, entryDate });
+            await dbUpdate('epi_employees', 'id', editId, { name, role, entryDate });
             await dbInsert('history', newLog);
         }
 
@@ -1262,7 +1262,7 @@ document.getElementById("form-add-employee").addEventListener("submit", async fu
     history.push(newLog);
 
     if (isCloudMode) {
-        await dbInsert('employees', newEmp);
+        await dbInsert('epi_employees', newEmp);
         await dbInsert('history', newLog);
     }
 
@@ -1277,7 +1277,7 @@ window.deleteEmployee = async function(id) {
         employees = employees.filter(emp => emp.id !== id);
         
         if (isCloudMode) {
-            await dbDelete('employees', 'id', id);
+            await dbDelete('epi_employees', 'id', id);
         }
 
         saveLocalState();
